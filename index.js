@@ -1,84 +1,71 @@
-// Load environment variables from .env (BOT_TOKEN, CLIENT_ID)
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
-// Import only the parts of discord.js we need
-const { Client, GatewayIntentBits, REST, Routes, ApplicationCommandOptionType } = require('discord.js');
+const { Client, Collection, GatewayIntentBits, REST, Routes } = require('discord.js');
 
-// Create the bot client with intents required for guild messages and content
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+client.commands = new Collection();
 
-// In-memory map: channelId -> { messageId, content }
-// Keeps track of the currently posted sticky for each channel while the process runs
 const stickies = new Map();
+const stickiesFile = path.join(__dirname, 'stickies.json');
 
-// Minimal slash commands: createsticky (with a 'message' string) and deletesticky
-const commands = [
-  {
-    name: 'createsticky',
-    description: 'Create a sticky message for this channel',
-    options: [ { name: 'message', description: 'Message to stick', type: ApplicationCommandOptionType.String, required: true } ]
-  },
-  { name: 'deletesticky', description: 'Delete the sticky message in this channel' }
-];
+function loadStickies() {
+  if (!fs.existsSync(stickiesFile)) return;
+  try {
+    const raw = fs.readFileSync(stickiesFile, 'utf8');
+    const data = JSON.parse(raw);
+    for (const [channelId, sticky] of Object.entries(data)) {
+      if (sticky && typeof sticky.content === 'string') {
+        stickies.set(channelId, sticky);
+      }
+    }
+    console.log(`Loaded ${stickies.size} sticky(s) from disk.`);
+  } catch (error) {
+    console.error('Failed to load stickies:', error);
+  }
+}
 
-// Register application (slash) commands globally using REST
+function saveStickies() {
+  try {
+    fs.writeFileSync(stickiesFile, JSON.stringify(Object.fromEntries(stickies), null, 2), 'utf8');
+  } catch (error) {
+    console.error('Failed to save stickies:', error);
+  }
+}
+
+const commands = [];
+const commandsPath = path.join(__dirname, 'commands');
+const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
+for (const file of commandFiles) {
+  const command = require(path.join(commandsPath, file));
+  client.commands.set(command.data.name, command);
+  commands.push(command.data);
+}
+
+loadStickies();
+
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
 (async () => {
-  try { await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands }); }
-  catch (e) { console.error('Failed to register commands:', e); }
+  try {
+    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
+    console.log('Slash commands registered.');
+  } catch (error) {
+    console.error('Failed to register commands:', error);
+  }
 })();
 
-// Log when the bot is ready
+const eventsPath = path.join(__dirname, 'events');
+const eventFiles = fs.readdirSync(eventsPath).filter((file) => file.endsWith('.js'));
+for (const file of eventFiles) {
+  const event = require(path.join(eventsPath, file));
+  if (event.once) {
+    client.once(event.name, (...args) => event.execute(...args, client, { stickies, saveStickies }));
+  } else {
+    client.on(event.name, (...args) => event.execute(...args, client, { stickies, saveStickies }));
+  }
+}
+
 client.once('ready', () => console.log(`Logged in as ${client.user.tag}`));
 
-// Handle slash command interactions
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isChatInputCommand()) return; // ignore non-chat-input interactions
-
-  const ch = interaction.channel;
-
-  // Create or replace the sticky for this channel
-  if (interaction.commandName === 'createsticky') {
-    const text = interaction.options.getString('message', true);
-
-    // If there's an existing sticky message, attempt to delete it
-    const prev = stickies.get(ch.id);
-    if (prev) {
-      try { const m = await ch.messages.fetch(prev.messageId); await m.delete().catch(() => {}); } catch {}
-    }
-
-    // Post the new sticky and record its id and content
-    const sent = await ch.send(text);
-    stickies.set(ch.id, { messageId: sent.id, content: text });
-
-    // Acknowledge to the command issuer (ephemeral)
-    await interaction.reply({ content: 'Sticky created.', ephemeral: true });
-    return;
-  }
-
-  // Delete the stored sticky for this channel (and the bot message if present)
-  if (interaction.commandName === 'deletesticky') {
-    const prev = stickies.get(ch.id);
-    if (!prev) { await interaction.reply({ content: 'No sticky set.', ephemeral: true }); return; }
-    try { const m = await ch.messages.fetch(prev.messageId); await m.delete().catch(() => {}); } catch {}
-    stickies.delete(ch.id);
-    await interaction.reply({ content: 'Sticky deleted.', ephemeral: true });
-    return;
-  }
-});
-
-// On any user message, refresh the sticky so it appears as the latest bot message
-client.on('messageCreate', async (message) => {
-  if (message.author.bot) return; // ignore bot messages
-
-  const prev = stickies.get(message.channel.id);
-  if (!prev) return; // no sticky for this channel
-
-  // Attempt to delete the previous sticky message, then re-send it
-  try { const m = await message.channel.messages.fetch(prev.messageId); await m.delete().catch(() => {}); } catch {}
-  const sent = await message.channel.send(prev.content);
-  stickies.set(message.channel.id, { messageId: sent.id, content: prev.content });
-});
-
-// Start the bot
 client.login(process.env.BOT_TOKEN);
