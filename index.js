@@ -34,6 +34,33 @@ function saveStickies() {
   }
 }
 
+const reactionRoles = new Map();
+const reactionRolesFile = path.join(__dirname, 'reactionroles.json');
+
+function loadReactionRoles() {
+  if (!fs.existsSync(reactionRolesFile)) return;
+  try {
+    const raw = fs.readFileSync(reactionRolesFile, 'utf8');
+    const data = JSON.parse(raw);
+    for (const [messageId, config] of Object.entries(data)) {
+      if (config && config.messageId && config.channelId && Array.isArray(config.roles)) {
+        reactionRoles.set(messageId, config);
+      }
+    }
+    console.log(`Loaded ${reactionRoles.size} reaction role panel(s) from disk.`);
+  } catch (error) {
+    console.error('Failed to load reaction role panels:', error);
+  }
+}
+
+function saveReactionRoles() {
+  try {
+    fs.writeFileSync(reactionRolesFile, JSON.stringify(Object.fromEntries(reactionRoles), null, 2), 'utf8');
+  } catch (error) {
+    console.error('Failed to save reaction role panels:', error);
+  }
+}
+
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
@@ -44,6 +71,7 @@ for (const file of commandFiles) {
 }
 
 loadStickies();
+loadReactionRoles();
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
 (async () => {
@@ -59,10 +87,11 @@ const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter((file) => file.endsWith('.js'));
 for (const file of eventFiles) {
   const event = require(path.join(eventsPath, file));
+  const context = { stickies, saveStickies, reactionRoles, saveReactionRoles };
   if (event.once) {
-    client.once(event.name, (...args) => event.execute(...args, client, { stickies, saveStickies }));
+    client.once(event.name, (...args) => event.execute(...args, client, context));
   } else {
-    client.on(event.name, (...args) => event.execute(...args, client, { stickies, saveStickies }));
+    client.on(event.name, (...args) => event.execute(...args, client, context));
   }
 }
 

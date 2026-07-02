@@ -18,8 +18,16 @@ module.exports = {
         await oldMessage.delete().catch(() => {});
       } catch {}
 
-      const sent = await message.channel.send(prev.content);
-      stickies.set(channelId, { messageId: sent.id, content: prev.content });
+      const sent = prev.embedData
+        ? await message.channel.send({ embeds: [prev.embedData] })
+        : await message.channel.send(prev.content);
+
+      stickies.set(channelId, {
+        messageId: sent.id,
+        content: prev.content,
+        embed: prev.embed || false,
+        embedData: prev.embedData,
+      });
       saveStickies();
     } finally {
       refreshing.delete(channelId);

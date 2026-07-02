@@ -1,6 +1,10 @@
 module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client, context) {
+    if (interaction.isStringSelectMenu()) {
+      return handleReactionRoleSelect(interaction, context);
+    }
+
     if (!interaction.isChatInputCommand()) return;
 
     const command = client.commands.get(interaction.commandName);
@@ -16,3 +20,39 @@ module.exports = {
     }
   },
 };
+
+async function handleReactionRoleSelect(interaction, context) {
+  const { reactionRoles } = context;
+  const panelId = interaction.message.id;
+  const config = reactionRoles.get(panelId);
+  if (!config) return;
+
+  const selectedRoleIds = interaction.values;
+  const member = interaction.member;
+  const currentRoleIds = config.roles.map((entry) => entry.roleId);
+
+  const toAdd = selectedRoleIds.filter((id) => !member.roles.cache.has(id));
+  const toRemove = currentRoleIds.filter((id) => !selectedRoleIds.includes(id) && member.roles.cache.has(id));
+
+  const results = [];
+  for (const roleId of toAdd) {
+    try {
+      await member.roles.add(roleId);
+      results.push(`Added <@&${roleId}>`);
+    } catch (error) {
+      console.warn('Failed to add reaction role:', error);
+    }
+  }
+
+  for (const roleId of toRemove) {
+    try {
+      await member.roles.remove(roleId);
+      results.push(`Removed <@&${roleId}>`);
+    } catch (error) {
+      console.warn('Failed to remove reaction role:', error);
+    }
+  }
+
+  const reply = results.length > 0 ? results.join('\n') : 'Your roles are already up to date.';
+  await interaction.reply({ content: reply, ephemeral: true });
+}
