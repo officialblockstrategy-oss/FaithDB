@@ -11,27 +11,31 @@ function parseMessageId(input) {
   return match ? match[1] : null;
 }
 
+function decodeEscapes(value) {
+  return typeof value === 'string' ? value.replace(/\\n/g, '\n') : value;
+}
+
 module.exports = {
   data: {
-    name: 'rr',
+    name: 'panel',
     description: 'Manage reaction role panels',
     options: [
       {
         name: 'create',
-        description: 'Create a new reaction-role panel',
+        description: 'Create a new panel (title and description optional)',
         type: ApplicationCommandOptionType.Subcommand,
         options: [
           {
             name: 'title',
             description: 'Embed title',
             type: ApplicationCommandOptionType.String,
-            required: true,
+            required: false,
           },
           {
             name: 'description',
             description: 'Embed description',
             type: ApplicationCommandOptionType.String,
-            required: true,
+            required: false,
           },
           {
             name: 'color',
@@ -126,64 +130,6 @@ module.exports = {
         ],
       },
       {
-        name: 'add',
-        description: 'Add roles to an existing reaction-role panel',
-        type: ApplicationCommandOptionType.SubcommandGroup,
-        options: [
-          {
-            name: 'role',
-            description: 'Add a role to an existing reaction-role panel',
-            type: ApplicationCommandOptionType.Subcommand,
-            options: [
-              {
-                name: 'message_id',
-                description: 'Message ID or link of the reaction-role message',
-                type: ApplicationCommandOptionType.String,
-                required: true,
-              },
-              {
-                name: 'role',
-                description: 'Role to add',
-                type: ApplicationCommandOptionType.Role,
-                required: true,
-              },
-              {
-                name: 'label',
-                description: 'Optional custom label for the role',
-                type: ApplicationCommandOptionType.String,
-                required: false,
-              },
-            ],
-          },
-        ],
-      },
-      {
-        name: 'remove',
-        description: 'Remove roles from an existing reaction-role panel',
-        type: ApplicationCommandOptionType.SubcommandGroup,
-        options: [
-          {
-            name: 'role',
-            description: 'Remove a role from an existing reaction-role panel',
-            type: ApplicationCommandOptionType.Subcommand,
-            options: [
-              {
-                name: 'message_id',
-                description: 'Message ID or link of the reaction-role message',
-                type: ApplicationCommandOptionType.String,
-                required: true,
-              },
-              {
-                name: 'role',
-                description: 'Role to remove',
-                type: ApplicationCommandOptionType.Role,
-                required: true,
-              },
-            ],
-          },
-        ],
-      },
-      {
         name: 'delete',
         description: 'Delete an existing reaction-role panel',
         type: ApplicationCommandOptionType.Subcommand,
@@ -208,16 +154,6 @@ module.exports = {
     const group = interaction.options.getSubcommandGroup(false);
     const subcommand = interaction.options.getSubcommand();
 
-    if (group === 'add' && subcommand === 'role') {
-      await handleAddRole(interaction, reactionRoles, saveReactionRoles);
-      return;
-    }
-
-    if (group === 'remove' && subcommand === 'role') {
-      await handleRemoveRole(interaction, reactionRoles, saveReactionRoles);
-      return;
-    }
-
     switch (subcommand) {
       case 'create':
         await handleCreate(interaction, reactionRoles, saveReactionRoles);
@@ -230,6 +166,10 @@ module.exports = {
     }
   },
 };
+
+module.exports.handleAddRole = handleAddRole;
+module.exports.handleRemoveRole = handleRemoveRole;
+module.exports.parseMessageId = parseMessageId;
 
 function buildSelectMenu(messageId, roles) {
   return new ActionRowBuilder().addComponents(
@@ -249,7 +189,9 @@ function buildSelectMenu(messageId, roles) {
 }
 
 function buildEmbed(title, description, color, authorName, authorIcon, thumbnail, image, footerText, field1Name, field1Value, field2Name, field2Value) {
-  const embed = new EmbedBuilder().setTitle(title).setDescription(description);
+  const embed = new EmbedBuilder()
+    .setTitle(decodeEscapes(title))
+    .setDescription(decodeEscapes(description));
 
   if (color) {
     const parsed = color.replace(/^#/, '');
@@ -259,35 +201,35 @@ function buildEmbed(title, description, color, authorName, authorIcon, thumbnail
   }
 
   if (authorName) {
-    embed.setAuthor({ name: authorName, iconURL: authorIcon || undefined });
+    embed.setAuthor({ name: decodeEscapes(authorName), iconURL: authorIcon || undefined });
   }
 
   if (thumbnail) {
-    embed.setThumbnail(thumbnail);
+    embed.setThumbnail(decodeEscapes(thumbnail));
   }
 
   if (image) {
-    embed.setImage(image);
+    embed.setImage(decodeEscapes(image));
   }
 
   if (footerText) {
-    embed.setFooter({ text: footerText });
+    embed.setFooter({ text: decodeEscapes(footerText) });
   }
 
   if (field1Name && field1Value) {
-    embed.addFields({ name: field1Name, value: field1Value, inline: false });
+    embed.addFields({ name: decodeEscapes(field1Name), value: decodeEscapes(field1Value), inline: false });
   }
 
   if (field2Name && field2Value) {
-    embed.addFields({ name: field2Name, value: field2Value, inline: false });
+    embed.addFields({ name: decodeEscapes(field2Name), value: decodeEscapes(field2Value), inline: false });
   }
 
   return embed;
 }
 
 async function handleCreate(interaction, reactionRoles, saveReactionRoles) {
-  const title = interaction.options.getString('title', true);
-  const description = interaction.options.getString('description', true);
+  const title = interaction.options.getString('title');
+  const description = interaction.options.getString('description');
   const color = interaction.options.getString('color');
   const authorName = interaction.options.getString('author_name');
   const authorIcon = interaction.options.getString('author_icon_url');
@@ -312,10 +254,15 @@ async function handleCreate(interaction, reactionRoles, saveReactionRoles) {
   }));
 
   const embed = buildEmbed(title, description, color, authorName, authorIcon, thumbnail, image, footerText, field1Name, field1Value, field2Name, field2Value);
-  const sendOptions = { embeds: [embed] };
+  const sendOptions = {};
+  const hasEmbed = title || description || color || authorName || thumbnail || image || footerText || (field1Name && field1Value) || (field2Name && field2Value);
+  if (hasEmbed) sendOptions.embeds = [embed];
   if (roleOptions.length > 0) {
     const menu = buildSelectMenu('temp', roleOptions);
     if (menu) sendOptions.components = [menu];
+  }
+  if (!sendOptions.embeds && !sendOptions.content) {
+    sendOptions.content = 'Reaction role panel created. Add roles with /rr add role <message_id>.';
   }
 
   const sent = await interaction.channel.send(sendOptions);
@@ -371,7 +318,7 @@ async function handleAddRole(interaction, reactionRoles, saveReactionRoles) {
   }
 
   config.roles.push({ roleId: role.id, label, description: `Grant ${label}` });
-  await refreshReactionRoleMessage(interaction, config);
+  await refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles);
 
   reactionRoles.set(messageId, config);
   saveReactionRoles();
@@ -416,7 +363,7 @@ async function handleRemoveRole(interaction, reactionRoles, saveReactionRoles) {
     return;
   }
 
-  await refreshReactionRoleMessage(interaction, config);
+  await refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles, reactionRoles, saveReactionRoles);
   reactionRoles.set(messageId, config);
   saveReactionRoles();
 
@@ -452,7 +399,7 @@ async function handleDelete(interaction, reactionRoles, saveReactionRoles) {
   await interaction.reply({ content: 'Reaction role panel deleted.', ephemeral: true });
 }
 
-async function refreshReactionRoleMessage(interaction, config) {
+async function refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles) {
   try {
     const channel = await interaction.client.channels.fetch(config.channelId);
     const message = await channel.messages.fetch(config.messageId);
@@ -463,8 +410,8 @@ async function refreshReactionRoleMessage(interaction, config) {
   } catch (error) {
     // If message doesn't exist, clean up the orphaned config
     if (error.code === 10008 || error.status === 404) {
-      interaction.client.reactionRoles?.delete(config.messageId);
-      interaction.client.saveReactionRoles?.();
+      if (reactionRoles?.delete) reactionRoles.delete(config.messageId);
+      if (typeof saveReactionRoles === 'function') saveReactionRoles();
       console.log(`Cleaned up orphaned reaction role panel: ${config.messageId}`);
     } else {
       console.error('Failed to refresh reaction role message:', error);

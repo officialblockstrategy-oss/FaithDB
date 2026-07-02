@@ -1,13 +1,33 @@
 module.exports = {
   name: 'messageDelete',
-  async execute(message, client, { reactionRoles, saveReactionRoles }) {
+  async execute(message, client, context) {
+    const { reactionRoles, saveReactionRoles, stickies, saveStickies } = context || {};
     const messageId = message.id;
-    const config = reactionRoles.get(messageId);
 
-    if (!config) return;
+    // Clean up reaction role panel if present
+    try {
+      if (reactionRoles && reactionRoles.has(messageId)) {
+        reactionRoles.delete(messageId);
+        if (typeof saveReactionRoles === 'function') saveReactionRoles();
+        console.log(`Cleaned up deleted reaction role panel: ${messageId}`);
+      }
+    } catch (err) {
+      console.warn('Error cleaning reaction role panel on messageDelete:', err);
+    }
 
-    reactionRoles.delete(messageId);
-    saveReactionRoles();
-    console.log(`Cleaned up deleted reaction role panel: ${messageId}`);
+    // Clean up sticky if the deleted message was a sticky for its channel
+    try {
+      const channelId = message.channel ? message.channel.id : null;
+      if (channelId && stickies && stickies.has(channelId)) {
+        const prev = stickies.get(channelId);
+        if (prev && prev.messageId === messageId) {
+          stickies.delete(channelId);
+          if (typeof saveStickies === 'function') saveStickies();
+          console.log(`Cleaned up deleted sticky for channel ${channelId}`);
+        }
+      }
+    } catch (err) {
+      console.warn('Error cleaning sticky on messageDelete:', err);
+    }
   },
 };

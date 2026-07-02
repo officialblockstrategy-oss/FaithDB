@@ -4,61 +4,116 @@ require('dotenv').config();
 
 const { Client, Collection, GatewayIntentBits, REST, Routes } = require('discord.js');
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+});
 client.commands = new Collection();
 
+const dataDir = path.join(__dirname, 'data');
+const { ensureFolder, loadJson, saveJson } = require('./utils/storage');
+
+ensureFolder(dataDir);
+
 const stickies = new Map();
-const stickiesFile = path.join(__dirname, 'stickies.json');
+const stickiesFile = path.join(dataDir, 'stickies.json');
+const reactionRoles = new Map();
+const reactionRolesFile = path.join(dataDir, 'reactionroles.json');
+const greetings = new Map();
+const greetingsFile = path.join(dataDir, 'greetings.json');
+const followups = new Map();
+const followupsFile = path.join(dataDir, 'followups.json');
+const verify = new Map();
+const verifyFile = path.join(dataDir, 'verify.json');
+
+function loadMap(filePath, validate, transform = (value) => value) {
+  const data = loadJson(filePath, {});
+  const map = new Map();
+  for (const [key, value] of Object.entries(data)) {
+    try {
+      if (validate(value, key)) {
+        map.set(key, transform(value, key));
+      }
+    } catch (error) {
+      console.warn(`Skipping invalid data at ${key} in ${filePath}:`, error);
+    }
+  }
+  return map;
+}
+
+function saveMap(filePath, map) {
+  try {
+    saveJson(filePath, Object.fromEntries(map));
+  } catch (error) {
+    console.error(`Failed to save ${filePath}:`, error);
+  }
+}
 
 function loadStickies() {
-  if (!fs.existsSync(stickiesFile)) return;
-  try {
-    const raw = fs.readFileSync(stickiesFile, 'utf8');
-    const data = JSON.parse(raw);
-    for (const [channelId, sticky] of Object.entries(data)) {
-      if (sticky && typeof sticky.content === 'string') {
-        stickies.set(channelId, sticky);
-      }
-    }
-    console.log(`Loaded ${stickies.size} sticky(s) from disk.`);
-  } catch (error) {
-    console.error('Failed to load stickies:', error);
-  }
+  const loaded = loadMap(stickiesFile, (sticky) => sticky && typeof sticky.content === 'string');
+  for (const [channelId, sticky] of loaded) stickies.set(channelId, sticky);
+  console.log(`Loaded ${stickies.size} sticky(s) from disk.`);
 }
 
 function saveStickies() {
-  try {
-    fs.writeFileSync(stickiesFile, JSON.stringify(Object.fromEntries(stickies), null, 2), 'utf8');
-  } catch (error) {
-    console.error('Failed to save stickies:', error);
-  }
+  saveMap(stickiesFile, stickies);
 }
 
-const reactionRoles = new Map();
-const reactionRolesFile = path.join(__dirname, 'reactionroles.json');
-
 function loadReactionRoles() {
-  if (!fs.existsSync(reactionRolesFile)) return;
-  try {
-    const raw = fs.readFileSync(reactionRolesFile, 'utf8');
-    const data = JSON.parse(raw);
-    for (const [messageId, config] of Object.entries(data)) {
-      if (config && config.messageId && config.channelId && Array.isArray(config.roles)) {
-        reactionRoles.set(messageId, config);
-      }
-    }
-    console.log(`Loaded ${reactionRoles.size} reaction role panel(s) from disk.`);
-  } catch (error) {
-    console.error('Failed to load reaction role panels:', error);
-  }
+  const loaded = loadMap(reactionRolesFile, (config) => config && config.messageId && config.channelId && Array.isArray(config.roles));
+  for (const [messageId, config] of loaded) reactionRoles.set(messageId, config);
+  console.log(`Loaded ${reactionRoles.size} reaction role panel(s) from disk.`);
 }
 
 function saveReactionRoles() {
-  try {
-    fs.writeFileSync(reactionRolesFile, JSON.stringify(Object.fromEntries(reactionRoles), null, 2), 'utf8');
-  } catch (error) {
-    console.error('Failed to save reaction role panels:', error);
+  saveMap(reactionRolesFile, reactionRoles);
+}
+
+function loadGreetings() {
+  const loaded = loadMap(greetingsFile, (cfg) => Array.isArray(cfg) || (cfg && Array.isArray(cfg.msgs)));
+  for (const [guildId, cfg] of loaded) {
+    if (Array.isArray(cfg)) {
+      greetings.set(guildId, { msgs: cfg, channelId: null });
+    } else {
+      greetings.set(guildId, { msgs: cfg.msgs || [], channelId: cfg.channelId || null });
+    }
   }
+  console.log(`Loaded ${greetings.size} greeting profile(s) from disk.`);
+}
+
+function saveGreetings() {
+  const data = Object.fromEntries(
+    [...greetings.entries()].map(([guildId, cfg]) => [
+      guildId,
+      { msgs: Array.isArray(cfg?.msgs) ? cfg.msgs : [], channelId: cfg?.channelId || null },
+    ])
+  );
+  saveJson(greetingsFile, data);
+}
+
+function loadFollowups() {
+  const loaded = loadMap(followupsFile, (list) => Array.isArray(list));
+  for (const [guildId, list] of loaded) followups.set(guildId, list);
+  console.log(`Loaded ${followups.size} follow-up profile(s) from disk.`);
+}
+
+function saveFollowups() {
+  saveMap(followupsFile, followups);
+}
+
+function loadVerify() {
+  const loaded = loadMap(verifyFile, (cfg) => cfg && typeof cfg === 'object');
+  for (const [guildId, cfg] of loaded) {
+    const validVerify = cfg.channelId && cfg.roleId && typeof cfg.word === 'string';
+    const validClean = Array.isArray(cfg.cleanChannels);
+    if (validVerify || validClean) {
+      verify.set(guildId, { cleanChannels: [], ...cfg });
+    }
+  }
+  console.log(`Loaded ${verify.size} verification setup(s) from disk.`);
+}
+
+function saveVerify() {
+  saveMap(verifyFile, verify);
 }
 
 const commands = [];
@@ -72,6 +127,9 @@ for (const file of commandFiles) {
 
 loadStickies();
 loadReactionRoles();
+loadGreetings();
+loadFollowups();
+loadVerify();
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
 (async () => {
@@ -87,7 +145,7 @@ const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter((file) => file.endsWith('.js'));
 for (const file of eventFiles) {
   const event = require(path.join(eventsPath, file));
-  const context = { stickies, saveStickies, reactionRoles, saveReactionRoles };
+  const context = { stickies, saveStickies, reactionRoles, saveReactionRoles, greetings, saveGreetings, followups, saveFollowups, verify, saveVerify };
   if (event.once) {
     client.once(event.name, (...args) => event.execute(...args, client, context));
   } else {

@@ -1,9 +1,44 @@
+const { render } = require('../utils/tpl');
+
 const refreshing = new Set();
 
 module.exports = {
   name: 'messageCreate',
-  async execute(message, client, { stickies, saveStickies }) {
-    if (message.author.bot) return;
+  async execute(message, client, { stickies, saveStickies, verify, followups }) {
+    if (message.author.bot || !message.guild) return;
+
+    const cfg = verify.get(message.guild.id);
+    if (cfg) {
+      const isVerify = message.channel.id === cfg.channelId;
+      const isClean = Array.isArray(cfg.cleanChannels) && cfg.cleanChannels.includes(message.channel.id);
+      if (isVerify) {
+        const member = message.member;
+        const role = member?.guild.roles.cache.get(cfg.roleId);
+        if (member && role && message.content.trim().toLowerCase() === cfg.word.trim().toLowerCase() && !member.roles.cache.has(role.id)) {
+          try {
+            await member.roles.add(role);
+          } catch {}
+
+          const list = followups.get(message.guild.id) || [];
+          if (list.length) {
+            const text = render(list[Math.floor(Math.random() * list.length)], { member, guild: message.guild, word: cfg.word, channel: message.channel, role });
+            try {
+              await member.send(text);
+            } catch {}
+          }
+
+          await message.delete().catch(() => {});
+        } else if (!message.author.bot) {
+          await message.delete().catch(() => {});
+        }
+        return;
+      }
+
+      if (isClean && !message.author.bot) {
+        await message.delete().catch(() => {});
+        return;
+      }
+    }
 
     const channelId = message.channel.id;
     if (refreshing.has(channelId)) return;
