@@ -1,10 +1,12 @@
 module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client, context) {
+    // Handle select menu interactions for reaction role panels first.
     if (interaction.isStringSelectMenu()) {
       return handleReactionRoleSelect(interaction, context);
     }
 
+    // Ignore non-slash-command interactions.
     if (!interaction.isChatInputCommand()) return;
 
     const command = client.commands.get(interaction.commandName);
@@ -22,11 +24,12 @@ module.exports = {
 };
 
 async function handleReactionRoleSelect(interaction, context) {
-  const { reactionRoles } = context;
+  const { panels } = context;
   const panelId = interaction.message.id;
-  const config = reactionRoles.get(panelId);
+  const config = panels.get(panelId);
   if (!config) return;
 
+  // Determine which roles need to be added and removed based on the current selection.
   const selectedRoleIds = interaction.values;
   const member = interaction.member;
   const currentRoleIds = config.roles.map((entry) => entry.roleId);

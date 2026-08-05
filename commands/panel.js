@@ -1,3 +1,5 @@
+// This module manages reaction role panels and is the main implementation behind the `/panel` command.
+// It stores panel configuration, creates and edits panel embeds, and refreshes the select menus.
 const {
   ApplicationCommandOptionType,
   EmbedBuilder,
@@ -6,11 +8,13 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 
+// Helper to extract a Discord message ID from a raw ID or message link.
 function parseMessageId(input) {
   const match = input.match(/(\d{17,19})$/);
   return match ? match[1] : null;
 }
 
+// Convert escaped `\n` sequences into real newlines for embeds.
 function decodeEscapes(value) {
   return typeof value === 'string' ? value.replace(/\\n/g, '\n') : value;
 }
@@ -200,7 +204,7 @@ module.exports = {
     ],
   },
 
-  async execute(interaction, client, { reactionRoles, saveReactionRoles }) {
+  async execute(interaction, client, { panels, savePanels }) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
       await interaction.reply({ content: 'You need Manage Roles permission to use this command.', ephemeral: true });
       return;
@@ -211,13 +215,13 @@ module.exports = {
 
     switch (subcommand) {
       case 'create':
-        await handleCreate(interaction, reactionRoles, saveReactionRoles);
+        await handleCreate(interaction, panels, savePanels);
         break;
       case 'edit':
-        await handleEdit(interaction, reactionRoles, saveReactionRoles);
+        await handleEdit(interaction, panels, savePanels);
         break;
       case 'delete':
-        await handleDelete(interaction, reactionRoles, saveReactionRoles);
+        await handleDelete(interaction, panels, savePanels);
         break;
       default:
         await interaction.reply({ content: 'Unknown command.', ephemeral: true });
@@ -229,12 +233,13 @@ module.exports.handleAddRole = handleAddRole;
 module.exports.handleRemoveRole = handleRemoveRole;
 module.exports.parseMessageId = parseMessageId;
 
+// Build the select menu component used by stored reaction role panels.
 function buildSelectMenu(messageId, roles) {
   if (!Array.isArray(roles) || roles.length === 0) return null;
 
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId(`reactionroles-${messageId}`)
+      .setCustomId(`panel-${messageId}`)
       .setPlaceholder('Choose your roles')
       .setMinValues(0)
       .setMaxValues(roles.length)
@@ -248,6 +253,7 @@ function buildSelectMenu(messageId, roles) {
   );
 }
 
+// Build a static embed from stored panel configuration values.
 function buildEmbed(title, description, color, authorName, authorIcon, thumbnail, image, footerText, field1Name, field1Value, field2Name, field2Value) {
   const embed = new EmbedBuilder()
     .setTitle(decodeEscapes(title))
@@ -287,7 +293,8 @@ function buildEmbed(title, description, color, authorName, authorIcon, thumbnail
   return embed;
 }
 
-async function handleCreate(interaction, reactionRoles, saveReactionRoles) {
+// Create a new reaction role panel message and persist its configuration.
+async function handleCreate(interaction, panels, savePanels) {
   const title = interaction.options.getString('title');
   const description = interaction.options.getString('description');
   const color = interaction.options.getString('color');
@@ -334,13 +341,14 @@ async function handleCreate(interaction, reactionRoles, saveReactionRoles) {
     roles: roleOptions,
   };
 
-  reactionRoles.set(sent.id, config);
-  saveReactionRoles();
+  panels.set(sent.id, config);
+  savePanels();
 
   await interaction.reply({ content: 'Reaction role panel created.', ephemeral: true });
 }
 
-async function handleAddRole(interaction, reactionRoles, saveReactionRoles) {
+// Add a role to an existing reaction role panel and refresh the message component.
+async function handleAddRole(interaction, panels, savePanels) {
   const rawId = interaction.options.getString('message_id', true);
   const messageId = parseMessageId(rawId);
   const role = interaction.options.getRole('role', true);
@@ -351,7 +359,7 @@ async function handleAddRole(interaction, reactionRoles, saveReactionRoles) {
     return;
   }
 
-  const config = reactionRoles.get(messageId);
+  const config = panels.get(messageId);
   if (!config) {
     await interaction.reply({ content: 'No reaction role panel found for that message.', ephemeral: true });
     return;
@@ -363,17 +371,18 @@ async function handleAddRole(interaction, reactionRoles, saveReactionRoles) {
   }
 
   config.roles.push({ roleId: role.id, label, description: `Grant ${label}` });
-  const refreshed = await refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles);
+  const refreshed = await refreshPanelMessage(interaction, config, panels, savePanels);
   if (!refreshed) {
     await interaction.reply({ content: 'The panel message no longer exists and was removed from storage.', ephemeral: true });
     return;
   }
 
-  saveReactionRoles();
+  savePanels();
   await interaction.reply({ content: `Added ${role.name} to the reaction role panel.`, ephemeral: true });
 }
 
-async function handleRemoveRole(interaction, reactionRoles, saveReactionRoles) {
+// Remove a role from an existing reaction role panel and delete the panel if there are no roles left.
+async function handleRemoveRole(interaction, panels, savePanels) {
   const rawId = interaction.options.getString('message_id', true);
   const messageId = parseMessageId(rawId);
   const role = interaction.options.getRole('role', true);
@@ -383,7 +392,7 @@ async function handleRemoveRole(interaction, reactionRoles, saveReactionRoles) {
     return;
   }
 
-  const config = reactionRoles.get(messageId);
+  const config = panels.get(messageId);
   if (!config) {
     await interaction.reply({ content: 'No reaction role panel found for that message.', ephemeral: true });
     return;
@@ -397,8 +406,8 @@ async function handleRemoveRole(interaction, reactionRoles, saveReactionRoles) {
 
   config.roles.splice(index, 1);
   if (config.roles.length === 0) {
-    reactionRoles.delete(messageId);
-    saveReactionRoles();
+    panels.delete(messageId);
+    savePanels();
     try {
       const channel = await interaction.client.channels.fetch(config.channelId);
       const message = await channel.messages.fetch(messageId);
@@ -410,17 +419,18 @@ async function handleRemoveRole(interaction, reactionRoles, saveReactionRoles) {
     return;
   }
 
-  const refreshed = await refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles);
+  const refreshed = await refreshPanelMessage(interaction, config, panels, savePanels);
   if (!refreshed) {
     await interaction.reply({ content: `Removed ${role.name}, but the panel message no longer exists and was cleaned up.`, ephemeral: true });
     return;
   }
 
-  saveReactionRoles();
+  savePanels();
   await interaction.reply({ content: `Removed ${role.name} from the panel.`, ephemeral: true });
 }
 
-async function handleEdit(interaction, reactionRoles, saveReactionRoles) {
+// Edit the embed content of an existing reaction role panel and update the displayed message.
+async function handleEdit(interaction, panels, savePanels) {
   const rawId = interaction.options.getString('message_id', true);
   const messageId = parseMessageId(rawId);
 
@@ -429,7 +439,7 @@ async function handleEdit(interaction, reactionRoles, saveReactionRoles) {
     return;
   }
 
-  const config = reactionRoles.get(messageId);
+  const config = panels.get(messageId);
   if (!config) {
     await interaction.reply({ content: 'No reaction role panel found for that message.', ephemeral: true });
     return;
@@ -468,17 +478,18 @@ async function handleEdit(interaction, reactionRoles, saveReactionRoles) {
   if (field2Name !== null) config.field2Name = field2Name;
   if (field2Value !== null) config.field2Value = field2Value;
 
-  const refreshed = await refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles);
+  const refreshed = await refreshPanelMessage(interaction, config, panels, savePanels);
   if (!refreshed) {
     await interaction.reply({ content: 'The panel message no longer exists and was removed from storage.', ephemeral: true });
     return;
   }
 
-  saveReactionRoles();
+  savePanels();
   await interaction.reply({ content: 'Panel updated.', ephemeral: true });
 }
 
-async function handleDelete(interaction, reactionRoles, saveReactionRoles) {
+// Delete a panel record and remove the stored panel message from Discord.
+async function handleDelete(interaction, panels, savePanels) {
   const rawId = interaction.options.getString('message_id', true);
   const messageId = parseMessageId(rawId);
 
@@ -487,14 +498,14 @@ async function handleDelete(interaction, reactionRoles, saveReactionRoles) {
     return;
   }
 
-  const config = reactionRoles.get(messageId);
+  const config = panels.get(messageId);
   if (!config) {
     await interaction.reply({ content: 'No reaction role panel found for that message.', ephemeral: true });
     return;
   }
 
-  reactionRoles.delete(messageId);
-  saveReactionRoles();
+  panels.delete(messageId);
+  savePanels();
 
   try {
     const channel = await interaction.client.channels.fetch(config.channelId);
@@ -507,7 +518,8 @@ async function handleDelete(interaction, reactionRoles, saveReactionRoles) {
   await interaction.reply({ content: 'Reaction role panel deleted.', ephemeral: true });
 }
 
-async function refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles) {
+// Refresh the display for a stored panel after configuration changes.
+async function refreshPanelMessage(interaction, config, panels, savePanels) {
   try {
     const channel = await interaction.client.channels.fetch(config.channelId);
     const message = await channel.messages.fetch(config.messageId);
@@ -518,10 +530,10 @@ async function refreshReactionRoleMessage(interaction, config, reactionRoles, sa
     });
     return true;
   } catch (error) {
-    // If message doesn't exist, clean up the orphaned config
+    // If message doesn't exist, clean up the orphaned config.
     if (error.code === 10008 || error.status === 404) {
-      if (reactionRoles?.delete) reactionRoles.delete(config.messageId);
-      if (typeof saveReactionRoles === 'function') saveReactionRoles();
+      if (panels?.delete) panels.delete(config.messageId);
+      if (typeof savePanels === 'function') savePanels();
       console.log(`Cleaned up orphaned reaction role panel: ${config.messageId}`);
       return false;
     }

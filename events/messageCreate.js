@@ -7,6 +7,7 @@ module.exports = {
   async execute(message, client, { stickies, saveStickies, verify, followups }) {
     if (message.author.bot || !message.guild) return;
 
+    // Verification and clean-channel handling takes precedence over sticky refresh.
     const cfg = verify.get(message.guild.id);
     if (cfg) {
       const isVerify = message.channel.id === cfg.channelId;
@@ -40,6 +41,8 @@ module.exports = {
       }
     }
 
+    // Sticky message support: when a new message appears in a channel with a sticky,
+    // delete the previous sticky message and repost it so it stays at the bottom.
     const channelId = message.channel.id;
     if (refreshing.has(channelId)) return;
 

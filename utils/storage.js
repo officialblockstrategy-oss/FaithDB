@@ -24,6 +24,8 @@ function saveJson(filePath, value) {
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2), 'utf8');
 }
 
+// Utility for loading and saving JSON-backed data files with graceful fallback.
+
 module.exports = {
   ensureFolder,
   loadJson,

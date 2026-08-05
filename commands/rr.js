@@ -1,5 +1,7 @@
+// This module is a lightweight wrapper around the panel manager.
+// It exposes `/rr add role` and `/rr remove role` while delegating the actual panel updates to panel.js.
 const { ApplicationCommandOptionType, PermissionFlagsBits } = require('discord.js');
-const panel = require('./reactionroles.js');
+const panel = require('./panel.js');
 
 module.exports = {
   data: {
@@ -68,6 +70,7 @@ module.exports = {
   },
 
   async execute(interaction, client, context) {
+    // Wrapper command for adding or removing roles from an existing reaction role panel.
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
       await interaction.reply({ content: 'You need Manage Roles permission to use this command.', ephemeral: true });
       return;
@@ -77,12 +80,12 @@ module.exports = {
     const subcommand = interaction.options.getSubcommand();
 
     if (group === 'add' && subcommand === 'role') {
-      await panel.handleAddRole(interaction, context.reactionRoles, context.saveReactionRoles);
+      await panel.handleAddRole(interaction, context.panels, context.savePanels);
       return;
     }
 
     if (group === 'remove' && subcommand === 'role') {
-      await panel.handleRemoveRole(interaction, context.reactionRoles, context.saveReactionRoles);
+      await panel.handleRemoveRole(interaction, context.panels, context.savePanels);
       return;
     }
 

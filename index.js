@@ -1,3 +1,5 @@
+// Main bot startup file. This loads environment configuration, initializes the Discord client,
+// loads saved data from disk, registers commands, and wires event handlers.
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -17,8 +19,8 @@ ensureFolder(dataDir);
 
 const stickies = new Map();
 const stickiesFile = path.join(dataDir, 'stickies.json');
-const reactionRoles = new Map();
-const reactionRolesFile = path.join(dataDir, 'reactionroles.json');
+const panels = new Map();
+const panelsFile = path.join(dataDir, 'panels.json');
 const greetings = new Map();
 const greetingsFile = path.join(dataDir, 'greetings.json');
 const followups = new Map();
@@ -26,6 +28,7 @@ const followupsFile = path.join(dataDir, 'followups.json');
 const verify = new Map();
 const verifyFile = path.join(dataDir, 'verify.json');
 
+// Load a JSON file into a Map, validating each entry and optionally transforming it.
 function loadMap(filePath, validate, transform = (value) => value) {
   const data = loadJson(filePath, {});
   const map = new Map();
@@ -59,14 +62,14 @@ function saveStickies() {
   saveMap(stickiesFile, stickies);
 }
 
-function loadReactionRoles() {
-  const loaded = loadMap(reactionRolesFile, (config) => config && config.messageId && config.channelId && Array.isArray(config.roles));
-  for (const [messageId, config] of loaded) reactionRoles.set(messageId, config);
-  console.log(`Loaded ${reactionRoles.size} reaction role panel(s) from disk.`);
+function loadPanels() {
+  const loaded = loadMap(panelsFile, (config) => config && config.messageId && config.channelId && Array.isArray(config.roles));
+  for (const [messageId, config] of loaded) panels.set(messageId, config);
+  console.log(`Loaded ${panels.size} reaction role panel(s) from disk.`);
 }
 
-function saveReactionRoles() {
-  saveMap(reactionRolesFile, reactionRoles);
+function savePanels() {
+  saveMap(panelsFile, panels);
 }
 
 function loadGreetings() {
@@ -117,6 +120,7 @@ function saveVerify() {
   saveMap(verifyFile, verify);
 }
 
+// Load command modules from the commands directory and collect command definitions.
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
@@ -127,7 +131,7 @@ for (const file of commandFiles) {
 }
 
 loadStickies();
-loadReactionRoles();
+loadPanels();
 loadGreetings();
 loadFollowups();
 loadVerify();
@@ -142,11 +146,12 @@ const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
   }
 })();
 
+// Register event handlers from the events directory, passing shared data and save functions.
 const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter((file) => file.endsWith('.js'));
 for (const file of eventFiles) {
   const event = require(path.join(eventsPath, file));
-  const context = { stickies, saveStickies, reactionRoles, saveReactionRoles, greetings, saveGreetings, followups, saveFollowups, verify, saveVerify };
+  const context = { stickies, saveStickies, panels, savePanels, greetings, saveGreetings, followups, saveFollowups, verify, saveVerify };
   if (event.once) {
     client.once(event.name, (...args) => event.execute(...args, client, context));
   } else {

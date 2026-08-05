@@ -117,6 +117,7 @@ module.exports = {
   },
 
   async execute(interaction, client, { stickies, saveStickies }) {
+    // Sticky command routes to creating text or embed stickies, or deleting the current sticky.
     const group = interaction.options.getSubcommandGroup(false);
     const subcommand = interaction.options.getSubcommand();
 

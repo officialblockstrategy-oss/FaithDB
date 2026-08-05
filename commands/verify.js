@@ -36,7 +36,8 @@ module.exports = {
     ],
   },
 
-  async execute(interaction, client, { verify, saveVerify, followups, saveFollowups, greetings, saveGreetings, reactionRoles, saveReactionRoles }) {
+  async execute(interaction, client, { verify, saveVerify, followups, saveFollowups, greetings, saveGreetings, panels, savePanels }) {
+    // Verification and follow-up command handler.
     if (!interaction.inGuild() || !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       await interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
       return;

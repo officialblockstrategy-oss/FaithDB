@@ -20,6 +20,7 @@ module.exports = {
   },
 
   async execute(interaction, client, { followups, saveFollowups }) {
+    // Requires Manage Server permission to inspect or remove follow-up DMs.
     if (!interaction.inGuild() || !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       await interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
       return;

@@ -1,14 +1,14 @@
 module.exports = {
   name: 'messageDelete',
   async execute(message, client, context) {
-    const { reactionRoles, saveReactionRoles, stickies, saveStickies } = context || {};
+    const { panels, savePanels, stickies, saveStickies } = context || {};
     const messageId = message.id;
 
     // Clean up reaction role panel if present
     try {
-      if (reactionRoles && reactionRoles.has(messageId)) {
-        reactionRoles.delete(messageId);
-        if (typeof saveReactionRoles === 'function') saveReactionRoles();
+      if (panels && panels.has(messageId)) {
+        panels.delete(messageId);
+        if (typeof savePanels === 'function') savePanels();
         console.log(`Cleaned up deleted reaction role panel: ${messageId}`);
       }
     } catch (err) {

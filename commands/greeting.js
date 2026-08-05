@@ -51,6 +51,7 @@ module.exports = {
   },
 
   async execute(interaction, client, { greetings, saveGreetings }) {
+    // Greeting management for storing and listing welcome messages.
     if (!interaction.inGuild() || !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       await interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
       return;
@@ -101,6 +102,7 @@ module.exports = {
 
       if (sub === 'number') {
         const raw = interaction.options.getString('numbers', true);
+        // Parse comma-separated greeting indexes and remove duplicates.
         const numbers = raw
           .split(',')
           .map((value) => parseInt(value.trim(), 10))
