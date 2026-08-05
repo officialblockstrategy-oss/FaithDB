@@ -1,5 +1,7 @@
 const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
 
+// Sticky messages are stored per channel. When a new message arrives in a channel with a sticky,
+// the old sticky message is deleted and reposted so the sticky stays at the bottom of the chat.
 function decodeEscapes(value) {
   return typeof value === 'string' ? value.replace(/\\n/g, '\n') : value;
 }
@@ -109,6 +111,105 @@ module.exports = {
         ],
       },
       {
+        name: 'edit',
+        description: 'Edit an existing sticky in this channel',
+        type: ApplicationCommandOptionType.SubcommandGroup,
+        options: [
+          {
+            name: 'text',
+            description: 'Edit the sticky text in this channel',
+            type: ApplicationCommandOptionType.Subcommand,
+            options: [
+              {
+                name: 'message',
+                description: 'New sticky text',
+                type: ApplicationCommandOptionType.String,
+                required: true,
+              },
+            ],
+          },
+          {
+            name: 'embed',
+            description: 'Edit the sticky embed in this channel',
+            type: ApplicationCommandOptionType.Subcommand,
+            options: [
+              {
+                name: 'title',
+                description: 'Embed title',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+              {
+                name: 'description',
+                description: 'Embed description',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+              {
+                name: 'color',
+                description: 'Embed color as hex (e.g. #5865F2)',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+              {
+                name: 'author_name',
+                description: 'Author text at the top of the embed',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+              {
+                name: 'author_icon_url',
+                description: 'URL for author icon',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+              {
+                name: 'thumbnail_url',
+                description: 'Embed thumbnail URL',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+              {
+                name: 'image_url',
+                description: 'Embed image URL',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+              {
+                name: 'footer',
+                description: 'Embed footer text',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+              {
+                name: 'field1_name',
+                description: 'Optional first field name',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+              {
+                name: 'field1_value',
+                description: 'Optional first field value',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+              {
+                name: 'field2_name',
+                description: 'Optional second field name',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+              {
+                name: 'field2_value',
+                description: 'Optional second field value',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+              },
+            ],
+          },
+        ],
+      },
+      {
         name: 'delete',
         description: 'Delete the stickied message in this channel',
         type: ApplicationCommandOptionType.Subcommand,
@@ -128,6 +229,16 @@ module.exports = {
 
     if (group === 'create' && subcommand === 'embed') {
       await handleCreateEmbed(interaction, stickies, saveStickies);
+      return;
+    }
+
+    if (group === 'edit' && subcommand === 'text') {
+      await handleEditText(interaction, stickies, saveStickies);
+      return;
+    }
+
+    if (group === 'edit' && subcommand === 'embed') {
+      await handleEditEmbed(interaction, stickies, saveStickies);
       return;
     }
 
@@ -156,6 +267,27 @@ async function handleCreateText(interaction, stickies, saveStickies) {
   stickies.set(channel.id, { messageId: sent.id, content: text });
   saveStickies();
   await interaction.reply({ content: 'Sticky created.', ephemeral: true });
+}
+
+async function handleEditText(interaction, stickies, saveStickies) {
+  const channel = interaction.channel;
+  const text = decodeEscapes(interaction.options.getString('message', true));
+  const prev = stickies.get(channel.id);
+
+  if (!prev) {
+    await interaction.reply({ content: 'No sticky set in this channel.', ephemeral: true });
+    return;
+  }
+
+  try {
+    const oldMessage = await channel.messages.fetch(prev.messageId);
+    await oldMessage.delete().catch(() => {});
+  } catch {}
+
+  const sent = await channel.send(text);
+  stickies.set(channel.id, { messageId: sent.id, content: text });
+  saveStickies();
+  await interaction.reply({ content: 'Sticky text updated.', ephemeral: true });
 }
 
 async function handleCreateEmbed(interaction, stickies, saveStickies) {
@@ -223,6 +355,87 @@ async function handleCreateEmbed(interaction, stickies, saveStickies) {
   });
   saveStickies();
   await interaction.reply({ content: 'Embed sticky created.', ephemeral: true });
+}
+
+// Edit the existing sticky embed in the current channel.
+// If a field is omitted, the previous embed value is preserved.
+async function handleEditEmbed(interaction, stickies, saveStickies) {
+  const channel = interaction.channel;
+  const prev = stickies.get(channel.id);
+
+  if (!prev || !prev.embed) {
+    await interaction.reply({ content: 'No embed sticky set in this channel.', ephemeral: true });
+    return;
+  }
+
+  const title = interaction.options.getString('title');
+  const description = interaction.options.getString('description');
+  const color = interaction.options.getString('color');
+  const authorName = decodeEscapes(interaction.options.getString('author_name'));
+  const authorIcon = interaction.options.getString('author_icon_url');
+  const thumbnail = interaction.options.getString('thumbnail_url');
+  const image = interaction.options.getString('image_url');
+  const footerText = decodeEscapes(interaction.options.getString('footer'));
+  const field1Name = decodeEscapes(interaction.options.getString('field1_name'));
+  const field1Value = decodeEscapes(interaction.options.getString('field1_value'));
+  const field2Name = decodeEscapes(interaction.options.getString('field2_name'));
+  const field2Value = decodeEscapes(interaction.options.getString('field2_value'));
+
+  const oldEmbedData = prev.embedData || {};
+  const embed = new EmbedBuilder()
+    .setTitle(title ?? oldEmbedData.title ?? '')
+    .setDescription(description ?? oldEmbedData.description ?? '');
+
+  const resolvedColor = color ?? oldEmbedData.color;
+  if (resolvedColor) {
+    const parsed = String(resolvedColor).replace(/^#/, '');
+    if (/^[0-9A-Fa-f]{6}$/.test(parsed)) {
+      embed.setColor(parseInt(parsed, 16));
+    }
+  }
+
+  if (authorName || oldEmbedData.author) {
+    embed.setAuthor({ name: authorName || oldEmbedData.author?.name || undefined, iconURL: authorIcon || oldEmbedData.author?.icon_url || undefined });
+  }
+
+  if (thumbnail || oldEmbedData.thumbnail) {
+    embed.setThumbnail(thumbnail || oldEmbedData.thumbnail?.url);
+  }
+
+  if (image || oldEmbedData.image) {
+    embed.setImage(image || oldEmbedData.image?.url);
+  }
+
+  if (footerText || oldEmbedData.footer) {
+    embed.setFooter({ text: footerText || oldEmbedData.footer?.text || undefined });
+  }
+
+  const resolvedField1Name = field1Name ?? oldEmbedData.fields?.[0]?.name;
+  const resolvedField1Value = field1Value ?? oldEmbedData.fields?.[0]?.value;
+  if (resolvedField1Name && resolvedField1Value) {
+    embed.addFields({ name: resolvedField1Name, value: resolvedField1Value, inline: false });
+  }
+
+  const resolvedField2Name = field2Name ?? oldEmbedData.fields?.[1]?.name;
+  const resolvedField2Value = field2Value ?? oldEmbedData.fields?.[1]?.value;
+  if (resolvedField2Name && resolvedField2Value) {
+    embed.addFields({ name: resolvedField2Name, value: resolvedField2Value, inline: false });
+  }
+
+  try {
+    const oldMessage = await channel.messages.fetch(prev.messageId);
+    await oldMessage.delete().catch(() => {});
+  } catch {}
+
+  const sent = await channel.send({ embeds: [embed] });
+  stickies.set(channel.id, {
+    messageId: sent.id,
+    content: null,
+    embed: true,
+    embedData: embed.toJSON(),
+  });
+  saveStickies();
+  await interaction.reply({ content: 'Embed sticky updated.', ephemeral: true });
 }
 
 async function handleDelete(interaction, stickies, saveStickies) {

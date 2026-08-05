@@ -8,9 +8,9 @@ A Discord bot that supports server verification, welcome greetings, follow-up DM
 - Follow-up DM templates sent after verification
 - Auto-clean channels where non-bot messages are deleted
 - Join greetings with configurable messages and channel
-- Sticky messages that re-post on new channel activity
-- Reaction role panels using select menus
-- Persistent storage in `data/*.json`
+- Sticky messages that re-post on new channel activity or can be edited in place
+- Reaction role panels managed by `/panel` and extended by `/rr`
+- Persistent JSON storage in `data/*.json`
 
 ## Setup
 
@@ -26,29 +26,39 @@ A Discord bot that supports server verification, welcome greetings, follow-up DM
    node index.js
    ```
 
+## Architecture
+
+- `index.js`: starts the bot, loads saved data, registers slash commands, and wires event handlers
+- `commands/panel.js`: main reaction role panel manager for `/panel`
+- `commands/rr.js`: wrapper for `/rr add role` and `/rr remove role`
+- `commands/sticky.js`: sticky text/embed creation, editing, and removal
+- `events/`: event handlers for interactions, messages, joins, and deletions
+- `utils/storage.js`: disk persistence helpers for JSON files
+- `utils/tpl.js`: template renderer for greeting and follow-up messages
+
 ## Command Summary
 
 ### `/verify`
 - `setup` — Set verification channel, word, and role
-- `followup` — Add a follow-up DM template
-- `clean` — Enable auto-clean for a channel
+- `followup` — Add a follow-up DM template sent after successful verification
+- `clean` — Enable auto-clean for a channel (deletes non-bot messages)
 - `unclean` — Disable auto-clean for a channel
 
 ### `/greeting`
 - `add` — Add a welcome message template
-- `channel` — Set a channel for welcome messages
+- `channel` — Set the channel for join greetings
 - `list` — List saved greetings
 - `remove all` — Remove all greetings
 - `remove number` — Remove greeting(s) by index
 
 ### `/followup`
-- `list` — List saved follow-up messages
+- `list` — List saved follow-up DMs
 - `delete` — Delete a follow-up by number
 
 ### `/panel`
-- `create` — Create a new reaction role panel message
-- `edit` — Edit an existing panel embed
-- `delete` — Delete a reaction role panel
+- `create` — Create a new reaction role panel embed message
+- `edit` — Edit an existing panel embed message
+- `delete` — Delete a panel and remove its message
 
 ### `/rr`
 - `add role` — Add a role to an existing panel
@@ -56,15 +66,17 @@ A Discord bot that supports server verification, welcome greetings, follow-up DM
 
 ### `/sticky`
 - `create text` — Create a sticky text message in the current channel
-- `create embed` — Create a sticky embed message
+- `create embed` — Create a sticky embed message in the current channel
+- `edit text` — Edit the existing sticky text message
+- `edit embed` — Edit the existing sticky embed message
 - `delete` — Delete the sticky for the current channel
 
 ### `/reset`
-- `all` — Clear all saved data and delete stored reaction role panels
+- `all` — Clear all saved data and delete stored panel messages
 
 ## Template placeholders (`utils/tpl.js`)
 
-`tpl.js` is used to render greeting and follow-up messages. These placeholders are supported in stored templates:
+`tpl.js` renders greeting and follow-up messages using these supported placeholders:
 
 - `<$user>` → display name
 - `<@user>` / `<@!user>` → mention of the member
@@ -76,21 +88,20 @@ A Discord bot that supports server verification, welcome greetings, follow-up DM
 - `{{channel}}` → channel mention or channel text
 - `{{role}}` → role mention
 
-Newline escape sequences like `\n` are converted into real newline characters.
+Newline escape sequences like `\n` become actual newlines.
 
 ## Data Storage
 
 Persistent bot data is stored in `data/`:
 
-- `stickies.json`
-- `panels.json`
-- `greetings.json`
-- `followups.json`
-- `verify.json`
+- `stickies.json` — current sticky message state per channel
+- `panels.json` — saved reaction-role panel configuration and role mapping
+- `greetings.json` — saved welcome greetings per guild
+- `followups.json` — saved follow-up DM templates per guild
+- `verify.json` — verification channel, word, role, and clean-channel settings
 
-## File structure
+## Notes
 
-- `index.js` — bot startup, command registration, and event wiring
-- `commands/` — slash command definitions and implementations
-- `events/` — Discord event handlers
-- `utils/` — storage and template rendering helpers
+- The public command is `/panel`, while `/rr` is a secondary add/remove helper for panel role lists.
+- Sticky embed edits preserve any existing embed fields and values when you omit them.
+- The verification flow can send follow-up DMs and delete any member messages in configured clean channels.

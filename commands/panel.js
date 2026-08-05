@@ -1,5 +1,7 @@
 // This module manages reaction role panels and is the main implementation behind the `/panel` command.
-// It stores panel configuration, creates and edits panel embeds, and refreshes the select menus.
+// Each panel is stored in memory keyed by its message ID and persisted to `data/panels.json`.
+// The panel message is rendered as an embed plus a select menu. `/rr` adds and removes roles
+// from the panel, while `/panel edit` updates the embed content itself.
 const {
   ApplicationCommandOptionType,
   EmbedBuilder,
@@ -254,6 +256,7 @@ function buildSelectMenu(messageId, roles) {
 }
 
 // Build a static embed from stored panel configuration values.
+// This helper normalizes escaped newlines and only applies values when provided.
 function buildEmbed(title, description, color, authorName, authorIcon, thumbnail, image, footerText, field1Name, field1Value, field2Name, field2Value) {
   const embed = new EmbedBuilder()
     .setTitle(decodeEscapes(title))
@@ -294,6 +297,7 @@ function buildEmbed(title, description, color, authorName, authorIcon, thumbnail
 }
 
 // Create a new reaction role panel message and persist its configuration.
+// Panels are created immediately, but roles are added separately through `/rr add role`.
 async function handleCreate(interaction, panels, savePanels) {
   const title = interaction.options.getString('title');
   const description = interaction.options.getString('description');
