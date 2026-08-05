@@ -9,7 +9,14 @@ function ensureFolder(folderPath) {
 function loadJson(filePath, fallback = {}) {
   if (!fs.existsSync(filePath)) return fallback;
   const raw = fs.readFileSync(filePath, 'utf8');
-  return raw ? JSON.parse(raw) : fallback;
+  if (!raw) return fallback;
+
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn(`Failed to parse JSON at ${filePath}. Using fallback value.`, error);
+    return fallback;
+  }
 }
 
 function saveJson(filePath, value) {

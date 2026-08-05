@@ -25,6 +25,20 @@ module.exports = {
       return;
     }
 
+    const deletedPanels = [];
+    for (const [messageId, config] of reactionRoles) {
+      try {
+        const channel = await client.channels.fetch(config.channelId);
+        if (channel && channel.isTextBased?.()) {
+          const message = await channel.messages.fetch(messageId);
+          await message.delete().catch(() => {});
+          deletedPanels.push(messageId);
+        }
+      } catch {
+        // Ignore failures while trying to remove panels that are already gone or unreachable.
+      }
+    }
+
     greetings.clear();
     followups.clear();
     verify.clear();
@@ -34,6 +48,10 @@ module.exports = {
     saveVerify();
     saveReactionRoles();
 
-    await interaction.reply({ content: 'All saved disk data has been cleared.', ephemeral: true });
+    const reply = deletedPanels.length
+      ? `Cleared all saved disk data and deleted ${deletedPanels.length} panel${deletedPanels.length === 1 ? '' : 's'}.`
+      : 'All saved disk data has been cleared.';
+
+    await interaction.reply({ content: reply, ephemeral: true });
   },
 };

@@ -97,34 +97,89 @@ module.exports = {
             type: ApplicationCommandOptionType.String,
             required: false,
           },
+        ],
+      },
+      {
+        name: 'edit',
+        description: 'Edit an existing panel (at least one field required)',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
           {
-            name: 'role1',
-            description: 'Optional role to include in the menu',
-            type: ApplicationCommandOptionType.Role,
+            name: 'message_id',
+            description: 'Message ID or link of the panel to edit',
+            type: ApplicationCommandOptionType.String,
+            required: true,
+          },
+          {
+            name: 'title',
+            description: 'New embed title',
+            type: ApplicationCommandOptionType.String,
             required: false,
           },
           {
-            name: 'role2',
-            description: 'Optional extra role',
-            type: ApplicationCommandOptionType.Role,
+            name: 'description',
+            description: 'New embed description',
+            type: ApplicationCommandOptionType.String,
             required: false,
           },
           {
-            name: 'role3',
-            description: 'Optional extra role',
-            type: ApplicationCommandOptionType.Role,
+            name: 'color',
+            description: 'New embed color as hex (e.g. #5865F2)',
+            type: ApplicationCommandOptionType.String,
             required: false,
           },
           {
-            name: 'role4',
-            description: 'Optional extra role',
-            type: ApplicationCommandOptionType.Role,
+            name: 'author_name',
+            description: 'New author text',
+            type: ApplicationCommandOptionType.String,
             required: false,
           },
           {
-            name: 'role5',
-            description: 'Optional extra role',
-            type: ApplicationCommandOptionType.Role,
+            name: 'author_icon_url',
+            description: 'New author icon URL',
+            type: ApplicationCommandOptionType.String,
+            required: false,
+          },
+          {
+            name: 'thumbnail_url',
+            description: 'New thumbnail URL',
+            type: ApplicationCommandOptionType.String,
+            required: false,
+          },
+          {
+            name: 'image_url',
+            description: 'New image URL',
+            type: ApplicationCommandOptionType.String,
+            required: false,
+          },
+          {
+            name: 'footer',
+            description: 'New footer text',
+            type: ApplicationCommandOptionType.String,
+            required: false,
+          },
+          {
+            name: 'field1_name',
+            description: 'New first field name',
+            type: ApplicationCommandOptionType.String,
+            required: false,
+          },
+          {
+            name: 'field1_value',
+            description: 'New first field value',
+            type: ApplicationCommandOptionType.String,
+            required: false,
+          },
+          {
+            name: 'field2_name',
+            description: 'New second field name',
+            type: ApplicationCommandOptionType.String,
+            required: false,
+          },
+          {
+            name: 'field2_value',
+            description: 'New second field value',
+            type: ApplicationCommandOptionType.String,
             required: false,
           },
         ],
@@ -158,6 +213,9 @@ module.exports = {
       case 'create':
         await handleCreate(interaction, reactionRoles, saveReactionRoles);
         break;
+      case 'edit':
+        await handleEdit(interaction, reactionRoles, saveReactionRoles);
+        break;
       case 'delete':
         await handleDelete(interaction, reactionRoles, saveReactionRoles);
         break;
@@ -172,6 +230,8 @@ module.exports.handleRemoveRole = handleRemoveRole;
 module.exports.parseMessageId = parseMessageId;
 
 function buildSelectMenu(messageId, roles) {
+  if (!Array.isArray(roles) || roles.length === 0) return null;
+
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`reactionroles-${messageId}`)
@@ -241,27 +301,12 @@ async function handleCreate(interaction, reactionRoles, saveReactionRoles) {
   const field2Name = interaction.options.getString('field2_name');
   const field2Value = interaction.options.getString('field2_value');
   
-  const roleIds = [];
-  for (let i = 1; i <= 5; i += 1) {
-    const role = interaction.options.getRole(`role${i}`);
-    if (role) roleIds.push(role);
-  }
-
-  const roleOptions = roleIds.map((role) => ({
-    roleId: role.id,
-    label: role.name,
-    description: `Grant ${role.name}`,
-  }));
-
+  const roleOptions = [];
   const embed = buildEmbed(title, description, color, authorName, authorIcon, thumbnail, image, footerText, field1Name, field1Value, field2Name, field2Value);
   const sendOptions = {};
   const hasEmbed = title || description || color || authorName || thumbnail || image || footerText || (field1Name && field1Value) || (field2Name && field2Value);
   if (hasEmbed) sendOptions.embeds = [embed];
-  if (roleOptions.length > 0) {
-    const menu = buildSelectMenu('temp', roleOptions);
-    if (menu) sendOptions.components = [menu];
-  }
-  if (!sendOptions.embeds && !sendOptions.content) {
+  if (!hasEmbed) {
     sendOptions.content = 'Reaction role panel created. Add roles with /rr add role <message_id>.';
   }
 
@@ -318,11 +363,13 @@ async function handleAddRole(interaction, reactionRoles, saveReactionRoles) {
   }
 
   config.roles.push({ roleId: role.id, label, description: `Grant ${label}` });
-  await refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles);
+  const refreshed = await refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles);
+  if (!refreshed) {
+    await interaction.reply({ content: 'The panel message no longer exists and was removed from storage.', ephemeral: true });
+    return;
+  }
 
-  reactionRoles.set(messageId, config);
   saveReactionRoles();
-
   await interaction.reply({ content: `Added ${role.name} to the reaction role panel.`, ephemeral: true });
 }
 
@@ -363,11 +410,72 @@ async function handleRemoveRole(interaction, reactionRoles, saveReactionRoles) {
     return;
   }
 
-  await refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles, reactionRoles, saveReactionRoles);
-  reactionRoles.set(messageId, config);
-  saveReactionRoles();
+  const refreshed = await refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles);
+  if (!refreshed) {
+    await interaction.reply({ content: `Removed ${role.name}, but the panel message no longer exists and was cleaned up.`, ephemeral: true });
+    return;
+  }
 
+  saveReactionRoles();
   await interaction.reply({ content: `Removed ${role.name} from the panel.`, ephemeral: true });
+}
+
+async function handleEdit(interaction, reactionRoles, saveReactionRoles) {
+  const rawId = interaction.options.getString('message_id', true);
+  const messageId = parseMessageId(rawId);
+
+  if (!messageId) {
+    await interaction.reply({ content: 'Please provide a valid message ID or link.', ephemeral: true });
+    return;
+  }
+
+  const config = reactionRoles.get(messageId);
+  if (!config) {
+    await interaction.reply({ content: 'No reaction role panel found for that message.', ephemeral: true });
+    return;
+  }
+
+  const title = interaction.options.getString('title');
+  const description = interaction.options.getString('description');
+  const color = interaction.options.getString('color');
+  const authorName = interaction.options.getString('author_name');
+  const authorIcon = interaction.options.getString('author_icon_url');
+  const thumbnail = interaction.options.getString('thumbnail_url');
+  const image = interaction.options.getString('image_url');
+  const footerText = interaction.options.getString('footer');
+  const field1Name = interaction.options.getString('field1_name');
+  const field1Value = interaction.options.getString('field1_value');
+  const field2Name = interaction.options.getString('field2_name');
+  const field2Value = interaction.options.getString('field2_value');
+
+  const hasChanges = title !== null || description !== null || color !== null || authorName !== null || authorIcon !== null || thumbnail !== null || image !== null || footerText !== null || field1Name !== null || field1Value !== null || field2Name !== null || field2Value !== null;
+
+  if (!hasChanges) {
+    await interaction.reply({ content: 'You must specify at least one field to edit.', ephemeral: true });
+    return;
+  }
+
+  if (title !== null) config.title = title;
+  if (description !== null) config.description = description;
+  if (color !== null) config.color = color;
+  if (authorName !== null) config.authorName = authorName;
+  if (authorIcon !== null) config.authorIcon = authorIcon;
+  if (thumbnail !== null) config.thumbnail = thumbnail;
+  if (image !== null) config.image = image;
+  if (footerText !== null) config.footerText = footerText;
+  if (field1Name !== null) config.field1Name = field1Name;
+  if (field1Value !== null) config.field1Value = field1Value;
+  if (field2Name !== null) config.field2Name = field2Name;
+  if (field2Value !== null) config.field2Value = field2Value;
+
+  const refreshed = await refreshReactionRoleMessage(interaction, config, reactionRoles, saveReactionRoles);
+  if (!refreshed) {
+    await interaction.reply({ content: 'The panel message no longer exists and was removed from storage.', ephemeral: true });
+    return;
+  }
+
+  saveReactionRoles();
+  await interaction.reply({ content: 'Panel updated.', ephemeral: true });
 }
 
 async function handleDelete(interaction, reactionRoles, saveReactionRoles) {
@@ -403,18 +511,22 @@ async function refreshReactionRoleMessage(interaction, config, reactionRoles, sa
   try {
     const channel = await interaction.client.channels.fetch(config.channelId);
     const message = await channel.messages.fetch(config.messageId);
+    const menu = buildSelectMenu(config.messageId, config.roles);
     await message.edit({
       embeds: [buildEmbed(config.title, config.description, config.color, config.authorName, config.authorIcon, config.thumbnail, config.image, config.footerText, config.field1Name, config.field1Value, config.field2Name, config.field2Value)],
-      components: [buildSelectMenu(config.messageId, config.roles)],
+      components: menu ? [menu] : [],
     });
+    return true;
   } catch (error) {
     // If message doesn't exist, clean up the orphaned config
     if (error.code === 10008 || error.status === 404) {
       if (reactionRoles?.delete) reactionRoles.delete(config.messageId);
       if (typeof saveReactionRoles === 'function') saveReactionRoles();
       console.log(`Cleaned up orphaned reaction role panel: ${config.messageId}`);
-    } else {
-      console.error('Failed to refresh reaction role message:', error);
+      return false;
     }
+
+    console.error('Failed to refresh reaction role message:', error);
+    return true;
   }
 }

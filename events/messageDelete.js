@@ -17,7 +17,7 @@ module.exports = {
 
     // Clean up sticky if the deleted message was a sticky for its channel
     try {
-      const channelId = message.channel ? message.channel.id : null;
+      const channelId = message.channel?.id || message.channelId || null;
       if (channelId && stickies && stickies.has(channelId)) {
         const prev = stickies.get(channelId);
         if (prev && prev.messageId === messageId) {

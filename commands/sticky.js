@@ -1,5 +1,9 @@
 const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
 
+function decodeEscapes(value) {
+  return typeof value === 'string' ? value.replace(/\\n/g, '\n') : value;
+}
+
 module.exports = {
   data: {
     name: 'sticky',
@@ -137,7 +141,7 @@ module.exports = {
 
 async function handleCreateText(interaction, stickies, saveStickies) {
   const channel = interaction.channel;
-  const text = interaction.options.getString('message', true);
+  const text = decodeEscapes(interaction.options.getString('message', true));
   const prev = stickies.get(channel.id);
 
   if (prev) {
@@ -155,18 +159,18 @@ async function handleCreateText(interaction, stickies, saveStickies) {
 
 async function handleCreateEmbed(interaction, stickies, saveStickies) {
   const channel = interaction.channel;
-  const title = interaction.options.getString('title', true);
-  const description = interaction.options.getString('description', true);
+  const title = decodeEscapes(interaction.options.getString('title', true));
+  const description = decodeEscapes(interaction.options.getString('description', true));
   const color = interaction.options.getString('color');
-  const authorName = interaction.options.getString('author_name');
+  const authorName = decodeEscapes(interaction.options.getString('author_name'));
   const authorIcon = interaction.options.getString('author_icon_url');
   const thumbnail = interaction.options.getString('thumbnail_url');
   const image = interaction.options.getString('image_url');
-  const footerText = interaction.options.getString('footer');
-  const field1Name = interaction.options.getString('field1_name');
-  const field1Value = interaction.options.getString('field1_value');
-  const field2Name = interaction.options.getString('field2_name');
-  const field2Value = interaction.options.getString('field2_value');
+  const footerText = decodeEscapes(interaction.options.getString('footer'));
+  const field1Name = decodeEscapes(interaction.options.getString('field1_name'));
+  const field1Value = decodeEscapes(interaction.options.getString('field1_value'));
+  const field2Name = decodeEscapes(interaction.options.getString('field2_name'));
+  const field2Value = decodeEscapes(interaction.options.getString('field2_value'));
 
   const prev = stickies.get(channel.id);
   if (prev) {

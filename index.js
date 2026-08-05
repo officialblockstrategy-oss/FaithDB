@@ -2,10 +2,11 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-const { Client, Collection, GatewayIntentBits, REST, Routes } = require('discord.js');
+const { Client, Collection, GatewayIntentBits, REST, Routes, Partials } = require('discord.js');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  partials: [Partials.Message, Partials.Channel],
 });
 client.commands = new Collection();
 
