@@ -1,4 +1,4 @@
-const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
+const { ApplicationCommandOptionType, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
 // Sticky messages are stored per channel. When a new message arrives in a channel with a sticky,
 // the old sticky message is deleted and reposted so the sticky stays at the bottom of the chat.
@@ -10,6 +10,8 @@ module.exports = {
   data: {
     name: 'sticky',
     description: 'Manage sticky messages for this channel',
+    default_member_permissions: PermissionFlagsBits.ManageGuild.toString(),
+    dm_permission: false,
     options: [
       {
         name: 'create',

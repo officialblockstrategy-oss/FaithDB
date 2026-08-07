@@ -4,6 +4,8 @@ module.exports = {
   data: {
     name: 'greeting',
     description: 'Manage welcome greetings',
+    default_member_permissions: PermissionFlagsBits.ManageGuild.toString(),
+    dm_permission: false,
     options: [
       {
         name: 'add',

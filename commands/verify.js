@@ -4,6 +4,8 @@ module.exports = {
   data: {
     name: 'verify',
     description: 'Manage verification',
+    default_member_permissions: PermissionFlagsBits.ManageGuild.toString(),
+    dm_permission: false,
     options: [
       {
         name: 'setup',

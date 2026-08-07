@@ -4,6 +4,8 @@ module.exports = {
   data: {
     name: 'followup',
     description: 'List or remove follow-up DM templates',
+    default_member_permissions: PermissionFlagsBits.ManageGuild.toString(),
+    dm_permission: false,
     options: [
       {
         name: 'list',

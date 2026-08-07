@@ -159,6 +159,6 @@ for (const file of eventFiles) {
   }
 }
 
-client.once('ready', () => console.log(`Logged in as ${client.user.tag}`));
+client.once('clientReady', () => console.log(`Logged in as ${client.user.tag}`));
 
 client.login(process.env.BOT_TOKEN);

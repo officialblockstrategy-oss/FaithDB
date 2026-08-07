@@ -4,6 +4,8 @@ module.exports = {
   data: {
     name: 'reset',
     description: 'Reset all saved bot data',
+    default_member_permissions: PermissionFlagsBits.ManageGuild.toString(),
+    dm_permission: false,
     options: [
       {
         name: 'all',

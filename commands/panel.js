@@ -25,6 +25,8 @@ module.exports = {
   data: {
     name: 'panel',
     description: 'Manage reaction role panels',
+    default_member_permissions: PermissionFlagsBits.ManageRoles.toString(),
+    dm_permission: false,
     options: [
       {
         name: 'create',
