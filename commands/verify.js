@@ -41,7 +41,7 @@ module.exports = {
   async execute(interaction, client, { verify, saveVerify, followups, saveFollowups, greetings, saveGreetings, panels, savePanels }) {
     // Verification and follow-up command handler.
     if (!interaction.inGuild() || !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      await interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
+      await interaction.reply({ content: 'You need Manage Server permission.', flags: 64 });
       return;
     }
 
@@ -53,14 +53,14 @@ module.exports = {
       const role = interaction.options.getRole('role', true);
 
       if (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement) {
-        await interaction.reply({ content: 'Pick a text channel.', ephemeral: true });
+        await interaction.reply({ content: 'Pick a text channel.', flags: 64 });
         return;
       }
 
       const old = verify.get(interaction.guildId) || {};
       verify.set(interaction.guildId, { ...old, channelId: channel.id, word, roleId: role.id, cleanChannels: old.cleanChannels || [] });
       saveVerify();
-      await interaction.reply({ content: `Verification set for ${channel.toString()} with word \`${word}\`.`, ephemeral: true });
+      await interaction.reply({ content: `Verification set for ${channel.toString()} with word \`${word}\`.`, flags: 64 });
       return;
     }
 
@@ -70,7 +70,7 @@ module.exports = {
       list.push(text);
       followups.set(interaction.guildId, list);
       saveFollowups();
-      await interaction.reply({ content: `Added follow-up #${list.length}.`, ephemeral: true });
+      await interaction.reply({ content: `Added follow-up #${list.length}.`, flags: 64 });
       return;
     }
 
@@ -81,7 +81,7 @@ module.exports = {
       if (!cleanChannels.includes(channel.id)) cleanChannels.push(channel.id);
       verify.set(interaction.guildId, { ...old, cleanChannels });
       saveVerify();
-      await interaction.reply({ content: `Auto-clean enabled for ${channel.toString()}.`, ephemeral: true });
+      await interaction.reply({ content: `Auto-clean enabled for ${channel.toString()}.`, flags: 64 });
       return;
     }
 
@@ -91,7 +91,7 @@ module.exports = {
       const cleanChannels = Array.isArray(old.cleanChannels) ? old.cleanChannels.filter((id) => id !== channel.id) : [];
       verify.set(interaction.guildId, { ...old, cleanChannels });
       saveVerify();
-      await interaction.reply({ content: `Auto-clean disabled for ${channel.toString()}.`, ephemeral: true });
+      await interaction.reply({ content: `Auto-clean disabled for ${channel.toString()}.`, flags: 64 });
       return;
     }
   },

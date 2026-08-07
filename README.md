@@ -10,6 +10,7 @@ A Discord bot that supports server verification, welcome greetings, follow-up DM
 - Join greetings with configurable messages and channel
 - Sticky messages that re-post on new channel activity or can be edited in place
 - Reaction role panels managed by `/panel` and extended by `/rr`
+- Sticky and panel commands only appear for users with the required permissions
 - Persistent JSON storage in `data/*.json`
 
 ## Setup
@@ -56,9 +57,10 @@ A Discord bot that supports server verification, welcome greetings, follow-up DM
 - `delete` — Delete a follow-up by number
 
 ### `/panel`
-- `create` — Create a new reaction role panel embed message
-- `edit` — Edit an existing panel embed message
+- `create` — Create a new reaction role panel embed message; opens a modal when no options are provided for multiline title/description/footer input
+- `edit` — Edit an existing panel embed message; opens a modal if no edit fields are passed
 - `delete` — Delete a panel and remove its message
+- `dashboard` — Show active reaction role panels in the server and panel links
 
 ### `/rr`
 - `add role` — Add a role to an existing panel

@@ -18,13 +18,13 @@ module.exports = {
   async execute(interaction, client, { greetings, saveGreetings, followups, saveFollowups, verify, saveVerify, panels, savePanels }) {
     // Clears all persisted server data and attempts to delete stored panels from Discord.
     if (!interaction.inGuild() || !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      await interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
+      await interaction.reply({ content: 'You need Manage Server permission.', flags: 64 });
       return;
     }
 
     const sub = interaction.options.getSubcommand();
     if (sub !== 'all') {
-      await interaction.reply({ content: 'Unknown reset command.', ephemeral: true });
+      await interaction.reply({ content: 'Unknown reset command.', flags: 64 });
       return;
     }
 
@@ -55,6 +55,6 @@ module.exports = {
       ? `Cleared all saved disk data and deleted ${deletedPanels.length} panel${deletedPanels.length === 1 ? '' : 's'}.`
       : 'All saved disk data has been cleared.';
 
-    await interaction.reply({ content: reply, ephemeral: true });
+    await interaction.reply({ content: reply, flags: 64 });
   },
 };

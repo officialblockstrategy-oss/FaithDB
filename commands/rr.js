@@ -74,7 +74,7 @@ module.exports = {
   async execute(interaction, client, context) {
     // Wrapper command for adding or removing roles from an existing reaction role panel.
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-      await interaction.reply({ content: 'You need Manage Roles permission to use this command.', ephemeral: true });
+      await interaction.reply({ content: 'You need Manage Roles permission to use this command.', flags: 64 });
       return;
     }
 
@@ -91,6 +91,6 @@ module.exports = {
       return;
     }
 
-    await interaction.reply({ content: 'Unknown command.', ephemeral: true });
+    await interaction.reply({ content: 'Unknown command.', flags: 64 });
   },
 };

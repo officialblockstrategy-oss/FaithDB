@@ -6,7 +6,10 @@ const {
   ApplicationCommandOptionType,
   EmbedBuilder,
   ActionRowBuilder,
+  ModalBuilder,
   StringSelectMenuBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   PermissionFlagsBits,
 } = require('discord.js');
 
@@ -205,12 +208,17 @@ module.exports = {
           },
         ],
       },
+      {
+        name: 'dashboard',
+        description: 'Show active reaction role panels in this server',
+        type: ApplicationCommandOptionType.Subcommand,
+      },
     ],
   },
 
   async execute(interaction, client, { panels, savePanels }) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-      await interaction.reply({ content: 'You need Manage Roles permission to use this command.', ephemeral: true });
+      await interaction.reply({ content: 'You need Manage Roles permission to use this command.', flags: 64 });
       return;
     }
 
@@ -218,24 +226,256 @@ module.exports = {
     const subcommand = interaction.options.getSubcommand();
 
     switch (subcommand) {
-      case 'create':
+      case 'create': {
+        const title = interaction.options.getString('title');
+        const description = interaction.options.getString('description');
+        const color = interaction.options.getString('color');
+        const authorName = interaction.options.getString('author_name');
+        const authorIcon = interaction.options.getString('author_icon_url');
+        const thumbnail = interaction.options.getString('thumbnail_url');
+        const image = interaction.options.getString('image_url');
+        const footerText = interaction.options.getString('footer');
+        const field1Name = interaction.options.getString('field1_name');
+        const field1Value = interaction.options.getString('field1_value');
+        const field2Name = interaction.options.getString('field2_name');
+        const field2Value = interaction.options.getString('field2_value');
+
+        if (
+          !title &&
+          !description &&
+          !color &&
+          !authorName &&
+          !authorIcon &&
+          !thumbnail &&
+          !image &&
+          !footerText &&
+          !field1Name &&
+          !field1Value &&
+          !field2Name &&
+          !field2Value
+        ) {
+          await showCreateModal(interaction);
+          return;
+        }
+
         await handleCreate(interaction, panels, savePanels);
         break;
-      case 'edit':
+      }
+      case 'edit': {
+        const title = interaction.options.getString('title');
+        const description = interaction.options.getString('description');
+        const color = interaction.options.getString('color');
+        const authorName = interaction.options.getString('author_name');
+        const authorIcon = interaction.options.getString('author_icon_url');
+        const thumbnail = interaction.options.getString('thumbnail_url');
+        const image = interaction.options.getString('image_url');
+        const footerText = interaction.options.getString('footer');
+        const field1Name = interaction.options.getString('field1_name');
+        const field1Value = interaction.options.getString('field1_value');
+        const field2Name = interaction.options.getString('field2_name');
+        const field2Value = interaction.options.getString('field2_value');
+
+        if (
+          !title &&
+          !description &&
+          !color &&
+          !authorName &&
+          !authorIcon &&
+          !thumbnail &&
+          !image &&
+          !footerText &&
+          !field1Name &&
+          !field1Value &&
+          !field2Name &&
+          !field2Value
+        ) {
+          await showEditModal(interaction, panels);
+          return;
+        }
+
         await handleEdit(interaction, panels, savePanels);
         break;
+      }
       case 'delete':
         await handleDelete(interaction, panels, savePanels);
         break;
+      case 'dashboard':
+        await handleDashboard(interaction, panels);
+        break;
       default:
-        await interaction.reply({ content: 'Unknown command.', ephemeral: true });
+        await interaction.reply({ content: 'Unknown command.', flags: 64 });
     }
   },
 };
 
 module.exports.handleAddRole = handleAddRole;
 module.exports.handleRemoveRole = handleRemoveRole;
+module.exports.handleModalSubmit = handleModalSubmit;
 module.exports.parseMessageId = parseMessageId;
+
+function buildPanelModal(customId, title, values) {
+  return new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle(title)
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('panel_title')
+          .setLabel('Panel title')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setValue(values.title || ''),
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('panel_description')
+          .setLabel('Panel description')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(false)
+          .setValue(values.description || ''),
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('panel_footer')
+          .setLabel('Footer text (optional)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setValue(values.footerText || ''),
+      ),
+    );
+}
+
+function getModalPanelValues(interaction) {
+  return {
+    title: interaction.fields.getTextInputValue('panel_title').trim() || null,
+    description: interaction.fields.getTextInputValue('panel_description').trim() || null,
+    footerText: interaction.fields.getTextInputValue('panel_footer').trim() || null,
+  };
+}
+
+async function showCreateModal(interaction) {
+  const modal = buildPanelModal('panel-create', 'Create Reaction Role Panel', {
+    title: '',
+    description: '',
+    footerText: '',
+  });
+
+  await interaction.showModal(modal);
+}
+
+async function showEditModal(interaction, panels) {
+  const rawId = interaction.options.getString('message_id', true);
+  const messageId = parseMessageId(rawId);
+  const config = panels.get(messageId);
+
+  if (!config) {
+    await interaction.reply({ content: 'No reaction role panel found for that message.', flags: 64 });
+    return;
+  }
+
+  const modal = buildPanelModal(`panel-edit:${messageId}`, 'Edit Reaction Role Panel', {
+    title: config.title || '',
+    description: config.description || '',
+    footerText: config.footerText || '',
+  });
+
+  await interaction.showModal(modal);
+}
+
+async function createPanelFromValues(interaction, panels, savePanels, config) {
+  const sendOptions = {};
+  const hasEmbed =
+    config.title ||
+    config.description ||
+    config.color ||
+    config.authorName ||
+    config.authorIcon ||
+    config.thumbnail ||
+    config.image ||
+    config.footerText ||
+    (config.field1Name && config.field1Value) ||
+    (config.field2Name && config.field2Value);
+
+  const embed = buildEmbed(
+    config.title,
+    config.description,
+    config.color,
+    config.authorName,
+    config.authorIcon,
+    config.thumbnail,
+    config.image,
+    config.footerText,
+    config.field1Name,
+    config.field1Value,
+    config.field2Name,
+    config.field2Value,
+  );
+
+  if (hasEmbed) {
+    sendOptions.embeds = [embed];
+  } else {
+    sendOptions.content = 'Reaction role panel created. Add roles with /rr add role <message_id>.';
+  }
+
+  const sent = await interaction.channel.send(sendOptions);
+
+  const fullConfig = {
+    messageId: sent.id,
+    channelId: interaction.channel.id,
+    title: config.title,
+    description: config.description,
+    color: config.color,
+    authorName: config.authorName,
+    authorIcon: config.authorIcon,
+    thumbnail: config.thumbnail,
+    image: config.image,
+    footerText: config.footerText,
+    field1Name: config.field1Name,
+    field1Value: config.field1Value,
+    field2Name: config.field2Name,
+    field2Value: config.field2Value,
+    roles: config.roles || [],
+  };
+
+  panels.set(sent.id, fullConfig);
+  savePanels();
+
+  await interaction.reply({ content: 'Reaction role panel created.', flags: 64 });
+}
+
+async function handleModalSubmit(interaction, panels, savePanels) {
+  const [action, messageId] = interaction.customId.split(':');
+
+  if (action === 'panel-create') {
+    const values = getModalPanelValues(interaction);
+    await createPanelFromValues(interaction, panels, savePanels, { ...values, roles: [] });
+    return;
+  }
+
+  if (action === 'panel-edit' && messageId) {
+    const config = panels.get(messageId);
+    if (!config) {
+      await interaction.reply({ content: 'No reaction role panel found for that message.', flags: 64 });
+      return;
+    }
+
+    const values = getModalPanelValues(interaction);
+    config.title = values.title;
+    config.description = values.description;
+    config.footerText = values.footerText;
+    const refreshed = await refreshPanelMessage(interaction, config, panels, savePanels);
+    if (!refreshed) {
+      await interaction.reply({ content: 'The panel message no longer exists and was removed from storage.', flags: 64 });
+      return;
+    }
+
+    savePanels();
+    await interaction.reply({ content: 'Panel updated.', flags: 64 });
+    return;
+  }
+
+  await interaction.reply({ content: 'Unknown panel modal submission.', flags: 64 });
+}
 
 // Build the select menu component used by stored reaction role panels.
 function buildSelectMenu(messageId, roles) {
@@ -313,8 +553,7 @@ async function handleCreate(interaction, panels, savePanels) {
   const field1Value = interaction.options.getString('field1_value');
   const field2Name = interaction.options.getString('field2_name');
   const field2Value = interaction.options.getString('field2_value');
-  
-  const roleOptions = [];
+
   const embed = buildEmbed(title, description, color, authorName, authorIcon, thumbnail, image, footerText, field1Name, field1Value, field2Name, field2Value);
   const sendOptions = {};
   const hasEmbed = title || description || color || authorName || thumbnail || image || footerText || (field1Name && field1Value) || (field2Name && field2Value);
@@ -323,15 +562,7 @@ async function handleCreate(interaction, panels, savePanels) {
     sendOptions.content = 'Reaction role panel created. Add roles with /rr add role <message_id>.';
   }
 
-  const sent = await interaction.channel.send(sendOptions);
-  if (roleOptions.length > 0) {
-    const components = [buildSelectMenu(sent.id, roleOptions)];
-    await sent.edit({ components });
-  }
-
   const config = {
-    messageId: sent.id,
-    channelId: interaction.channel.id,
     title,
     description,
     color,
@@ -344,13 +575,10 @@ async function handleCreate(interaction, panels, savePanels) {
     field1Value,
     field2Name,
     field2Value,
-    roles: roleOptions,
+    roles: [],
   };
 
-  panels.set(sent.id, config);
-  savePanels();
-
-  await interaction.reply({ content: 'Reaction role panel created.', ephemeral: true });
+  await createPanelFromValues(interaction, panels, savePanels, config);
 }
 
 // Add a role to an existing reaction role panel and refresh the message component.
@@ -361,30 +589,30 @@ async function handleAddRole(interaction, panels, savePanels) {
   const label = interaction.options.getString('label') || role.name;
 
   if (!messageId) {
-    await interaction.reply({ content: 'Please provide a valid message ID or link.', ephemeral: true });
+    await interaction.reply({ content: 'Please provide a valid message ID or link.', flags: 64 });
     return;
   }
 
   const config = panels.get(messageId);
   if (!config) {
-    await interaction.reply({ content: 'No reaction role panel found for that message.', ephemeral: true });
+    await interaction.reply({ content: 'No reaction role panel found for that message.', flags: 64 });
     return;
   }
 
   if (config.roles.some((entry) => entry.roleId === role.id)) {
-    await interaction.reply({ content: 'That role is already included in this panel.', ephemeral: true });
+    await interaction.reply({ content: 'That role is already included in this panel.', flags: 64 });
     return;
   }
 
   config.roles.push({ roleId: role.id, label, description: `Grant ${label}` });
   const refreshed = await refreshPanelMessage(interaction, config, panels, savePanels);
   if (!refreshed) {
-    await interaction.reply({ content: 'The panel message no longer exists and was removed from storage.', ephemeral: true });
+    await interaction.reply({ content: 'The panel message no longer exists and was removed from storage.', flags: 64 });
     return;
   }
 
   savePanels();
-  await interaction.reply({ content: `Added ${role.name} to the reaction role panel.`, ephemeral: true });
+  await interaction.reply({ content: `Added ${role.name} to the reaction role panel.`, flags: 64 });
 }
 
 // Remove a role from an existing reaction role panel and delete the panel if there are no roles left.
@@ -394,19 +622,19 @@ async function handleRemoveRole(interaction, panels, savePanels) {
   const role = interaction.options.getRole('role', true);
 
   if (!messageId) {
-    await interaction.reply({ content: 'Please provide a valid message ID or link.', ephemeral: true });
+    await interaction.reply({ content: 'Please provide a valid message ID or link.', flags: 64 });
     return;
   }
 
   const config = panels.get(messageId);
   if (!config) {
-    await interaction.reply({ content: 'No reaction role panel found for that message.', ephemeral: true });
+    await interaction.reply({ content: 'No reaction role panel found for that message.', flags: 64 });
     return;
   }
 
   const index = config.roles.findIndex((entry) => entry.roleId === role.id);
   if (index === -1) {
-    await interaction.reply({ content: 'That role is not part of this panel.', ephemeral: true });
+    await interaction.reply({ content: 'That role is not part of this panel.', flags: 64 });
     return;
   }
 
@@ -421,18 +649,18 @@ async function handleRemoveRole(interaction, panels, savePanels) {
     } catch (error) {
       console.warn('Could not delete reaction role message after removing the last role:', error);
     }
-    await interaction.reply({ content: 'Removed the last role and deleted the panel.', ephemeral: true });
+    await interaction.reply({ content: 'Removed the last role and deleted the panel.', flags: 64 });
     return;
   }
 
   const refreshed = await refreshPanelMessage(interaction, config, panels, savePanels);
   if (!refreshed) {
-    await interaction.reply({ content: `Removed ${role.name}, but the panel message no longer exists and was cleaned up.`, ephemeral: true });
+    await interaction.reply({ content: `Removed ${role.name}, but the panel message no longer exists and was cleaned up.`, flags: 64 });
     return;
   }
 
   savePanels();
-  await interaction.reply({ content: `Removed ${role.name} from the panel.`, ephemeral: true });
+  await interaction.reply({ content: `Removed ${role.name} from the panel.`, flags: 64 });
 }
 
 // Edit the embed content of an existing reaction role panel and update the displayed message.
@@ -441,13 +669,13 @@ async function handleEdit(interaction, panels, savePanels) {
   const messageId = parseMessageId(rawId);
 
   if (!messageId) {
-    await interaction.reply({ content: 'Please provide a valid message ID or link.', ephemeral: true });
+    await interaction.reply({ content: 'Please provide a valid message ID or link.', flags: 64 });
     return;
   }
 
   const config = panels.get(messageId);
   if (!config) {
-    await interaction.reply({ content: 'No reaction role panel found for that message.', ephemeral: true });
+    await interaction.reply({ content: 'No reaction role panel found for that message.', flags: 64 });
     return;
   }
 
@@ -467,7 +695,7 @@ async function handleEdit(interaction, panels, savePanels) {
   const hasChanges = title !== null || description !== null || color !== null || authorName !== null || authorIcon !== null || thumbnail !== null || image !== null || footerText !== null || field1Name !== null || field1Value !== null || field2Name !== null || field2Value !== null;
 
   if (!hasChanges) {
-    await interaction.reply({ content: 'You must specify at least one field to edit.', ephemeral: true });
+    await interaction.reply({ content: 'You must specify at least one field to edit.', flags: 64 });
     return;
   }
 
@@ -486,12 +714,12 @@ async function handleEdit(interaction, panels, savePanels) {
 
   const refreshed = await refreshPanelMessage(interaction, config, panels, savePanels);
   if (!refreshed) {
-    await interaction.reply({ content: 'The panel message no longer exists and was removed from storage.', ephemeral: true });
+    await interaction.reply({ content: 'The panel message no longer exists and was removed from storage.', flags: 64 });
     return;
   }
 
   savePanels();
-  await interaction.reply({ content: 'Panel updated.', ephemeral: true });
+  await interaction.reply({ content: 'Panel updated.', flags: 64 });
 }
 
 // Delete a panel record and remove the stored panel message from Discord.
@@ -500,13 +728,13 @@ async function handleDelete(interaction, panels, savePanels) {
   const messageId = parseMessageId(rawId);
 
   if (!messageId) {
-    await interaction.reply({ content: 'Please provide a valid message ID or link.', ephemeral: true });
+    await interaction.reply({ content: 'Please provide a valid message ID or link.', flags: 64 });
     return;
   }
 
   const config = panels.get(messageId);
   if (!config) {
-    await interaction.reply({ content: 'No reaction role panel found for that message.', ephemeral: true });
+    await interaction.reply({ content: 'No reaction role panel found for that message.', flags: 64 });
     return;
   }
 
@@ -521,7 +749,54 @@ async function handleDelete(interaction, panels, savePanels) {
     console.warn('Could not delete reaction role message:', error);
   }
 
-  await interaction.reply({ content: 'Reaction role panel deleted.', ephemeral: true });
+  await interaction.reply({ content: 'Reaction role panel deleted.', flags: 64 });
+}
+
+async function handleDashboard(interaction, panels) {
+  const guild = interaction.guild;
+  if (!guild) {
+    await interaction.reply({ content: 'This command must be used in a server.', flags: 64 });
+    return;
+  }
+
+  const panelEntries = [...panels.entries()].filter(([, config]) => config && config.channelId);
+  if (!panelEntries.length) {
+    await interaction.reply({ content: 'No active reaction role panels in this server.', flags: 64 });
+    return;
+  }
+
+  const fields = [];
+  const visibleEntries = panelEntries.slice(0, 20);
+
+  for (let index = 0; index < visibleEntries.length; index += 1) {
+    const [messageId, config] = visibleEntries[index];
+    const channel = guild.channels.cache.get(config.channelId);
+    const channelDisplay = channel ? channel.toString() : `Unknown channel (${config.channelId})`;
+    const panelTitle = config.title ? config.title : 'Untitled panel';
+    const description = config.description ? `\n${config.description}` : '';
+    const roleCount = Array.isArray(config.roles) ? config.roles.length : 0;
+    const link = `https://discord.com/channels/${guild.id}/${config.channelId}/${messageId}`;
+
+    fields.push({
+      name: `${index + 1}. ${panelTitle}`,
+      value: `Channel: ${channelDisplay}\nMessage: [Open panel](${link})\nRoles: ${roleCount}${description}`,
+    });
+  }
+
+  if (panelEntries.length > visibleEntries.length) {
+    fields.push({
+      name: 'More panels',
+      value: `Showing ${visibleEntries.length} of ${panelEntries.length} panels. Use /panel delete <message_id> to remove old panels.`,
+    });
+  }
+
+  const dashboardEmbed = new EmbedBuilder()
+    .setTitle('Reaction Role Panel Dashboard')
+    .setDescription(`${panelEntries.length} active panel${panelEntries.length === 1 ? '' : 's'} in this server.`)
+    .addFields(fields)
+    .setFooter({ text: 'Use /panel edit or /panel delete to manage panels.' });
+
+  await interaction.reply({ embeds: [dashboardEmbed], flags: 64 });
 }
 
 // Refresh the display for a stored panel after configuration changes.

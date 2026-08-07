@@ -55,7 +55,7 @@ module.exports = {
   async execute(interaction, client, { greetings, saveGreetings }) {
     // Greeting management for storing and listing welcome messages.
     if (!interaction.inGuild() || !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      await interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
+      await interaction.reply({ content: 'You need Manage Server permission.', flags: 64 });
       return;
     }
 
@@ -66,7 +66,7 @@ module.exports = {
       cfg.msgs.push(interaction.options.getString('text', true));
       greetings.set(interaction.guildId, cfg);
       saveGreetings();
-      await interaction.reply({ content: `Added greeting #${cfg.msgs.length}.`, ephemeral: true });
+      await interaction.reply({ content: `Added greeting #${cfg.msgs.length}.`, flags: 64 });
       return;
     }
 
@@ -75,16 +75,16 @@ module.exports = {
       cfg.channelId = channel.id;
       greetings.set(interaction.guildId, cfg);
       saveGreetings();
-      await interaction.reply({ content: `Join greetings will go to ${channel.toString()}.`, ephemeral: true });
+      await interaction.reply({ content: `Join greetings will go to ${channel.toString()}.`, flags: 64 });
       return;
     }
 
     if (sub === 'list') {
       if (!cfg.msgs.length) {
-        await interaction.reply({ content: 'No greetings yet.', ephemeral: true });
+        await interaction.reply({ content: 'No greetings yet.', flags: 64 });
         return;
       }
-      await interaction.reply({ content: `Greetings:\n${cfg.msgs.map((t, i) => `${i + 1}. ${t}`).join('\n')}`, ephemeral: true });
+      await interaction.reply({ content: `Greetings:\n${cfg.msgs.map((t, i) => `${i + 1}. ${t}`).join('\n')}`, flags: 64 });
       return;
     }
 
@@ -92,13 +92,13 @@ module.exports = {
     if (group === 'remove') {
       if (sub === 'all') {
         if (!cfg.msgs.length) {
-          await interaction.reply({ content: 'No greetings to remove.', ephemeral: true });
+          await interaction.reply({ content: 'No greetings to remove.', flags: 64 });
           return;
         }
         cfg.msgs = [];
         greetings.set(interaction.guildId, cfg);
         saveGreetings();
-        await interaction.reply({ content: 'All greetings removed.', ephemeral: true });
+        await interaction.reply({ content: 'All greetings removed.', flags: 64 });
         return;
       }
 
@@ -111,7 +111,7 @@ module.exports = {
           .filter((value) => Number.isInteger(value));
 
         if (!numbers.length) {
-          await interaction.reply({ content: 'Please provide one or more valid greeting numbers.', ephemeral: true });
+          await interaction.reply({ content: 'Please provide one or more valid greeting numbers.', flags: 64 });
           return;
         }
 
@@ -120,7 +120,7 @@ module.exports = {
         const validNumbers = uniqueNumbers.filter((num) => num >= 1 && num <= cfg.msgs.length);
 
         if (!validNumbers.length) {
-          await interaction.reply({ content: 'None of the provided greeting numbers are valid.', ephemeral: true });
+          await interaction.reply({ content: 'None of the provided greeting numbers are valid.', flags: 64 });
           return;
         }
 
@@ -135,7 +135,7 @@ module.exports = {
           reply += ` Invalid numbers ignored: ${invalidNumbers.join(', ')}.`;
         }
 
-        await interaction.reply({ content: reply, ephemeral: true });
+        await interaction.reply({ content: reply, flags: 64 });
         return;
       }
     }

@@ -6,18 +6,21 @@ module.exports = {
       return handleReactionRoleSelect(interaction, context);
     }
 
-    // Ignore non-slash-command interactions.
-    if (!interaction.isChatInputCommand()) return;
+  // Handle panel modals before command execution.
+  if (interaction.isModalSubmit() && interaction.customId?.startsWith('panel-')) {
+    const panelCommand = client.commands.get('panel');
+    if (panelCommand?.handleModalSubmit) {
+      return panelCommand.handleModalSubmit(interaction, context.panels, context.savePanels);
+    }
+  }
 
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return;
 
     try {
       await command.execute(interaction, client, context);
     } catch (error) {
       console.error('Interaction command error:', error);
       if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: 'Something went wrong.', ephemeral: true });
+        await interaction.reply({ content: 'Something went wrong.', flags: 64 });
       }
     }
   },
@@ -57,5 +60,5 @@ async function handleReactionRoleSelect(interaction, context) {
   }
 
   const reply = results.length > 0 ? results.join('\n') : 'Your roles are already up to date.';
-  await interaction.reply({ content: reply, ephemeral: true });
+  await interaction.reply({ content: reply, flags: 64 });
 }

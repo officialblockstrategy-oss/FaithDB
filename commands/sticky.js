@@ -249,7 +249,7 @@ module.exports = {
       return;
     }
 
-    await interaction.reply({ content: 'Unknown sticky command.', ephemeral: true });
+    await interaction.reply({ content: 'Unknown sticky command.', flags: 64 });
   },
 };
 
@@ -268,7 +268,7 @@ async function handleCreateText(interaction, stickies, saveStickies) {
   const sent = await channel.send(text);
   stickies.set(channel.id, { messageId: sent.id, content: text });
   saveStickies();
-  await interaction.reply({ content: 'Sticky created.', ephemeral: true });
+  await interaction.reply({ content: 'Sticky created.', flags: 64 });
 }
 
 async function handleEditText(interaction, stickies, saveStickies) {
@@ -277,7 +277,7 @@ async function handleEditText(interaction, stickies, saveStickies) {
   const prev = stickies.get(channel.id);
 
   if (!prev) {
-    await interaction.reply({ content: 'No sticky set in this channel.', ephemeral: true });
+    await interaction.reply({ content: 'No sticky set in this channel.', flags: 64 });
     return;
   }
 
@@ -289,7 +289,7 @@ async function handleEditText(interaction, stickies, saveStickies) {
   const sent = await channel.send(text);
   stickies.set(channel.id, { messageId: sent.id, content: text });
   saveStickies();
-  await interaction.reply({ content: 'Sticky text updated.', ephemeral: true });
+  await interaction.reply({ content: 'Sticky text updated.', flags: 64 });
 }
 
 async function handleCreateEmbed(interaction, stickies, saveStickies) {
@@ -356,7 +356,7 @@ async function handleCreateEmbed(interaction, stickies, saveStickies) {
     embedData: embed.toJSON(),
   });
   saveStickies();
-  await interaction.reply({ content: 'Embed sticky created.', ephemeral: true });
+  await interaction.reply({ content: 'Embed sticky created.', flags: 64 });
 }
 
 // Edit the existing sticky embed in the current channel.
@@ -366,7 +366,7 @@ async function handleEditEmbed(interaction, stickies, saveStickies) {
   const prev = stickies.get(channel.id);
 
   if (!prev || !prev.embed) {
-    await interaction.reply({ content: 'No embed sticky set in this channel.', ephemeral: true });
+    await interaction.reply({ content: 'No embed sticky set in this channel.', flags: 64 });
     return;
   }
 
@@ -437,14 +437,14 @@ async function handleEditEmbed(interaction, stickies, saveStickies) {
     embedData: embed.toJSON(),
   });
   saveStickies();
-  await interaction.reply({ content: 'Embed sticky updated.', ephemeral: true });
+  await interaction.reply({ content: 'Embed sticky updated.', flags: 64 });
 }
 
 async function handleDelete(interaction, stickies, saveStickies) {
   const channel = interaction.channel;
   const prev = stickies.get(channel.id);
   if (!prev) {
-    await interaction.reply({ content: 'No sticky set.', ephemeral: true });
+    await interaction.reply({ content: 'No sticky set.', flags: 64 });
     return;
   }
 
@@ -455,5 +455,5 @@ async function handleDelete(interaction, stickies, saveStickies) {
 
   stickies.delete(channel.id);
   saveStickies();
-  await interaction.reply({ content: 'Sticky deleted.', ephemeral: true });
+  await interaction.reply({ content: 'Sticky deleted.', flags: 64 });
 }

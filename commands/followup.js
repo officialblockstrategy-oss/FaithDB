@@ -24,7 +24,7 @@ module.exports = {
   async execute(interaction, client, { followups, saveFollowups }) {
     // Requires Manage Server permission to inspect or remove follow-up DMs.
     if (!interaction.inGuild() || !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      await interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
+      await interaction.reply({ content: 'You need Manage Server permission.', flags: 64 });
       return;
     }
 
@@ -33,23 +33,23 @@ module.exports = {
 
     if (sub === 'list') {
       if (!list.length) {
-        await interaction.reply({ content: 'No follow-ups yet.', ephemeral: true });
+        await interaction.reply({ content: 'No follow-ups yet.', flags: 64 });
         return;
       }
-      await interaction.reply({ content: `Follow-ups:\n${list.map((t, i) => `${i + 1}. ${t}`).join('\n')}`, ephemeral: true });
+      await interaction.reply({ content: `Follow-ups:\n${list.map((t, i) => `${i + 1}. ${t}`).join('\n')}`, flags: 64 });
       return;
     }
 
     if (sub === 'delete') {
       const num = interaction.options.getInteger('number', true);
       if (num < 1 || num > list.length) {
-        await interaction.reply({ content: 'That follow-up does not exist.', ephemeral: true });
+        await interaction.reply({ content: 'That follow-up does not exist.', flags: 64 });
         return;
       }
       list.splice(num - 1, 1);
       followups.set(interaction.guildId, list);
       saveFollowups();
-      await interaction.reply({ content: 'Follow-up removed.', ephemeral: true });
+      await interaction.reply({ content: 'Follow-up removed.', flags: 64 });
       return;
     }
   },
