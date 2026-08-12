@@ -24,10 +24,35 @@ function saveJson(filePath, value) {
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2), 'utf8');
 }
 
+function loadMap(filePath, validate, transform = (value) => value) {
+  const data = loadJson(filePath, {});
+  const map = new Map();
+  for (const [key, value] of Object.entries(data)) {
+    try {
+      if (validate(value, key)) {
+        map.set(key, transform(value, key));
+      }
+    } catch (error) {
+      console.warn(`Skipping invalid data at ${key} in ${filePath}:`, error);
+    }
+  }
+  return map;
+}
+
+function saveMap(filePath, map) {
+  try {
+    saveJson(filePath, Object.fromEntries(map));
+  } catch (error) {
+    console.error(`Failed to save ${filePath}:`, error);
+  }
+}
+
 // Utility for loading and saving JSON-backed data files with graceful fallback.
 
 module.exports = {
   ensureFolder,
   loadJson,
   saveJson,
+  loadMap,
+  saveMap,
 };

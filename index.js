@@ -13,7 +13,7 @@ const client = new Client({
 client.commands = new Collection();
 
 const dataDir = path.join(__dirname, 'data');
-const { ensureFolder, loadJson, saveJson } = require('./utils/storage');
+const { ensureFolder, loadJson, saveJson, loadMap, saveMap } = require('./utils/storage');
 
 ensureFolder(dataDir);
 
@@ -27,30 +27,12 @@ const followups = new Map();
 const followupsFile = path.join(dataDir, 'followups.json');
 const verify = new Map();
 const verifyFile = path.join(dataDir, 'verify.json');
-
-// Load a JSON file into a Map, validating each entry and optionally transforming it.
-function loadMap(filePath, validate, transform = (value) => value) {
-  const data = loadJson(filePath, {});
-  const map = new Map();
-  for (const [key, value] of Object.entries(data)) {
-    try {
-      if (validate(value, key)) {
-        map.set(key, transform(value, key));
-      }
-    } catch (error) {
-      console.warn(`Skipping invalid data at ${key} in ${filePath}:`, error);
-    }
-  }
-  return map;
-}
-
-function saveMap(filePath, map) {
-  try {
-    saveJson(filePath, Object.fromEntries(map));
-  } catch (error) {
-    console.error(`Failed to save ${filePath}:`, error);
-  }
-}
+const bumpDetection = new Map();
+const bumpDetectionFile = path.join(dataDir, 'bump-detect.json');
+const kudos = new Map();
+const kudosFile = path.join(dataDir, 'kudos.json');
+const quests = new Map();
+const questsFile = path.join(dataDir, 'quests.json');
 
 function loadStickies() {
   const loaded = loadMap(stickiesFile, (sticky) => sticky && typeof sticky.content === 'string');
@@ -120,6 +102,134 @@ function saveVerify() {
   saveMap(verifyFile, verify);
 }
 
+const { startVeriPurgeLoop } = require('./services/verificationPurge');
+
+function loadBumpDetection() {
+  const loaded = loadMap(bumpDetectionFile, (cfg) => cfg && typeof cfg === 'object');
+  for (const [guildId, cfg] of loaded) {
+    if (cfg && typeof cfg === 'object') {
+      bumpDetection.set(guildId, {
+        enabled: Boolean(cfg.enabled !== false),
+        channelId: cfg.channelId || null,
+        userId: cfg.userId || null,
+        commandName: typeof cfg.commandName === 'string' ? cfg.commandName.toLowerCase() : null,
+        successText: typeof cfg.successText === 'string' ? cfg.successText.toLowerCase() : '',
+        reward: Number(cfg.reward) || 12,
+        emoji: typeof cfg.emoji === 'string' && cfg.emoji.trim() ? cfg.emoji.trim() : '✅',
+        updatedAt: Number(cfg.updatedAt) || Date.now(),
+      });
+    }
+  }
+  console.log(`Loaded ${bumpDetection.size} bump detection setup(s) from disk.`);
+}
+
+function saveBumpDetection() {
+  saveMap(bumpDetectionFile, bumpDetection);
+}
+
+function loadKudos() {
+  const raw = loadJson(kudosFile, {});
+  for (const [guildId, entries] of Object.entries(raw || {})) {
+    const guildMap = new Map();
+    if (entries && typeof entries === 'object') {
+      for (const [userId, entry] of Object.entries(entries)) {
+        if (entry && typeof entry === 'object') {
+          guildMap.set(userId, {
+            total: Number(entry.total) || 0,
+            history: Array.isArray(entry.history) ? entry.history : [],
+            manual: entry.manual || {},
+            gratitude: entry.gratitude || {},
+            bump: entry.bump || {},
+            activity: entry.activity || {},
+          });
+        }
+      }
+    }
+    if (guildMap.size) {
+      kudos.set(guildId, guildMap);
+    }
+  }
+  const totalProfiles = [...kudos.values()].reduce((sum, map) => sum + map.size, 0);
+  console.log(`Loaded ${totalProfiles} kudos profile(s) from disk.`);
+}
+
+function saveKudos() {
+  const data = Object.fromEntries(
+    [...kudos.entries()].map(([guildId, guildMap]) => [guildId, Object.fromEntries(guildMap)])
+  );
+  saveJson(kudosFile, data);
+}
+
+function loadQuests() {
+  const raw = loadJson(questsFile, {});
+  for (const [guildId, state] of Object.entries(raw || {})) {
+    const catalog = new Map();
+    const memberProgress = new Map();
+
+    const guildCatalog = state && typeof state === 'object' && state.catalog && typeof state.catalog === 'object' ? state.catalog : {};
+    for (const [questId, quest] of Object.entries(guildCatalog)) {
+      if (quest && typeof quest === 'object') {
+        catalog.set(questId, {
+          id: quest.id || questId,
+          title: typeof quest.title === 'string' ? quest.title : questId,
+          description: typeof quest.description === 'string' ? quest.description : '',
+          enabled: quest.enabled !== false,
+          createdAt: Number(quest.createdAt) || Date.now(),
+          ...quest,
+        });
+      }
+    }
+
+    const guildProgress = state && typeof state === 'object' && state.memberProgress && typeof state.memberProgress === 'object' ? state.memberProgress : {};
+    for (const [userId, recordSet] of Object.entries(guildProgress)) {
+      if (recordSet && typeof recordSet === 'object') {
+        const userEntries = new Map();
+        for (const [questId, record] of Object.entries(recordSet)) {
+          if (record && typeof record === 'object') {
+            userEntries.set(questId, {
+              questId: record.questId || questId,
+              completed: Boolean(record.completed),
+              progress: Number(record.progress) || 0,
+              completedAt: Number(record.completedAt) || null,
+              updatedAt: Number(record.updatedAt) || Date.now(),
+              ...record,
+            });
+          }
+        }
+        if (userEntries.size) {
+          memberProgress.set(userId, userEntries);
+        }
+      }
+    }
+
+    if (catalog.size || memberProgress.size) {
+      quests.set(guildId, { catalog, memberProgress });
+    }
+  }
+
+  const totalQuestDefinitions = [...quests.values()].reduce((sum, guildState) => sum + guildState.catalog.size, 0);
+  const totalQuestProgress = [...quests.values()].reduce((sum, guildState) => sum + [...guildState.memberProgress.values()].reduce((count, entries) => count + entries.size, 0), 0);
+  console.log(`Loaded ${totalQuestDefinitions} quest definition(s) and ${totalQuestProgress} quest progress record(s) from disk.`);
+}
+
+function saveQuests() {
+  const data = Object.fromEntries(
+    [...quests.entries()].map(([guildId, guildState]) => [
+      guildId,
+      {
+        catalog: Object.fromEntries(guildState.catalog || new Map()),
+        memberProgress: Object.fromEntries(
+          [...(guildState.memberProgress || new Map()).entries()].map(([userId, recordSet]) => [
+            userId,
+            Object.fromEntries(recordSet),
+          ])
+        ),
+      },
+    ])
+  );
+  saveJson(questsFile, data);
+}
+
 // Load command modules from the commands directory and collect command definitions.
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
@@ -135,6 +245,9 @@ loadPanels();
 loadGreetings();
 loadFollowups();
 loadVerify();
+loadBumpDetection();
+loadKudos();
+loadQuests();
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
 (async () => {
@@ -151,7 +264,7 @@ const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter((file) => file.endsWith('.js'));
 for (const file of eventFiles) {
   const event = require(path.join(eventsPath, file));
-  const context = { stickies, saveStickies, panels, savePanels, greetings, saveGreetings, followups, saveFollowups, verify, saveVerify };
+  const context = { stickies, saveStickies, panels, savePanels, greetings, saveGreetings, followups, saveFollowups, verify, saveVerify, bumpDetection, saveBumpDetection, kudos, saveKudos, quests, saveQuests };
   if (event.once) {
     client.once(event.name, (...args) => event.execute(...args, client, context));
   } else {
@@ -159,6 +272,9 @@ for (const file of eventFiles) {
   }
 }
 
-client.once('clientReady', () => console.log(`Logged in as ${client.user.tag}`));
+client.once('ready', () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  startVeriPurgeLoop(client, verify, saveVerify);
+});
 
 client.login(process.env.BOT_TOKEN);

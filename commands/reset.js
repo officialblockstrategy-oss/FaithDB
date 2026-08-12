@@ -15,7 +15,7 @@ module.exports = {
     ],
   },
 
-  async execute(interaction, client, { greetings, saveGreetings, followups, saveFollowups, verify, saveVerify, panels, savePanels }) {
+  async execute(interaction, client, { greetings, saveGreetings, followups, saveFollowups, verify, saveVerify, panels, savePanels, quests, saveQuests }) {
     // Clears all persisted server data and attempts to delete stored panels from Discord.
     if (!interaction.inGuild() || !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       await interaction.reply({ content: 'You need Manage Server permission.', flags: 64 });
@@ -46,10 +46,12 @@ module.exports = {
     followups.clear();
     verify.clear();
     panels.clear();
+    quests.clear();
     saveGreetings();
     saveFollowups();
     saveVerify();
     savePanels();
+    saveQuests();
 
     const reply = deletedPanels.length
       ? `Cleared all saved disk data and deleted ${deletedPanels.length} panel${deletedPanels.length === 1 ? '' : 's'}.`
