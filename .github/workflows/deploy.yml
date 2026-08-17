@@ -24,4 +24,4 @@ jobs:
       - name: Verify FaithDB
         run: |
           sleep 5
-          sudo systemctl is-active --quiet faithdb
+          systemctl is-active --quiet faithdb
