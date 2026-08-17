@@ -36,7 +36,7 @@ The goal is to keep the feature set small, predictable, and easy to maintain.
 
 ## Setup
 
-1. Create a `.env` file with:
+1. Copy `.env.example` to `.env` and fill in your own values:
    - `BOT_TOKEN`
    - `CLIENT_ID`
 2. Install dependencies:
@@ -165,6 +165,8 @@ The current implementation provides the infrastructure layer; actual quest defin
 ## Data Storage
 
 Persistent bot state sits under `data/`:
+
+This directory is intentionally local runtime state and is not committed to Git.
 
 - `stickies.json` — sticky message state per channel
 - `panels.json` — reaction-role panel configuration
