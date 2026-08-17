@@ -1,0 +1,27 @@
+name: Deploy FaithDB
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Update FaithDB
+        run: |
+          cd /home/faith-bot/FaithDB
+          git fetch origin main
+          git reset --hard origin/main
+          npm ci
+
+      - name: Restart FaithDB
+        run: |
+          sudo systemctl restart faithdb
+
+      - name: Verify FaithDB
+        run: |
+          sleep 5
+          sudo systemctl is-active --quiet faithdb
