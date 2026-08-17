@@ -14,6 +14,10 @@ function decodeEscapes(value) {
   return typeof value === 'string' ? value.replace(/\\n/g, '\n') : value;
 }
 
+function getStickyChannelId(interaction) {
+  return interaction.channelId || interaction.channel?.id || null;
+}
+
 module.exports = {
   data: {
     name: 'sticky',
@@ -263,9 +267,9 @@ module.exports = {
 
 module.exports.handleModalSubmit = handleModalSubmit;
 
-function buildTextStickyModal(value = '') {
+function buildTextStickyModal(channelId, value = '') {
   return new ModalBuilder()
-    .setCustomId('sticky-edit-text')
+    .setCustomId(`sticky-edit-text:${channelId}`)
     .setTitle('Edit Sticky Text')
     .addComponents(
       new ActionRowBuilder().addComponents(
@@ -279,9 +283,9 @@ function buildTextStickyModal(value = '') {
     );
 }
 
-function buildEmbedStickyModal(values) {
+function buildEmbedStickyModal(channelId, values) {
   return new ModalBuilder()
-    .setCustomId('sticky-edit-embed')
+    .setCustomId(`sticky-edit-embed:${channelId}`)
     .setTitle('Edit Sticky Embed')
     .addComponents(
       new ActionRowBuilder().addComponents(
@@ -312,18 +316,20 @@ function buildEmbedStickyModal(values) {
 }
 
 async function showEditTextModal(interaction, stickies) {
-  const prev = stickies.get(interaction.channel.id);
+  const channelId = getStickyChannelId(interaction);
+  const prev = channelId ? stickies.get(channelId) : null;
 
   if (!prev || prev.embed) {
     await interaction.reply({ content: 'No text sticky set in this channel.', flags: 64 });
     return;
   }
 
-  await interaction.showModal(buildTextStickyModal(prev.content || ''));
+  await interaction.showModal(buildTextStickyModal(channelId, prev.content || ''));
 }
 
 async function showEditEmbedModal(interaction, stickies) {
-  const prev = stickies.get(interaction.channel.id);
+  const channelId = getStickyChannelId(interaction);
+  const prev = channelId ? stickies.get(channelId) : null;
 
   if (!prev || !prev.embed) {
     await interaction.reply({ content: 'No embed sticky set in this channel.', flags: 64 });
@@ -331,7 +337,7 @@ async function showEditEmbedModal(interaction, stickies) {
   }
 
   const embedData = prev.embedData || {};
-  await interaction.showModal(buildEmbedStickyModal({
+  await interaction.showModal(buildEmbedStickyModal(channelId, {
     title: embedData.title || '',
     description: embedData.description || '',
     footerText: embedData.footer?.text || '',
@@ -389,23 +395,32 @@ function buildStickyEmbed(values) {
 }
 
 async function handleModalSubmit(interaction, stickies, saveStickies) {
-  if (interaction.customId === 'sticky-edit-text') {
-    const prev = stickies.get(interaction.channel.id);
+  const [action, targetChannelId] = interaction.customId.split(':');
+  const channelId = targetChannelId || getStickyChannelId(interaction);
+  const channel = channelId ? await interaction.client.channels.fetch(channelId).catch(() => null) : null;
+
+  if (!channel?.isTextBased?.()) {
+    await interaction.reply({ content: 'Could not resolve the target channel for this sticky update.', flags: 64 });
+    return;
+  }
+
+  if (action === 'sticky-edit-text') {
+    const prev = stickies.get(channelId);
     if (!prev || prev.embed) {
       await interaction.reply({ content: 'No text sticky set in this channel.', flags: 64 });
       return;
     }
 
     const text = decodeEscapes(interaction.fields.getTextInputValue('sticky_text_message'));
-    const sent = await replaceStickyMessage(interaction.channel, prev, text);
-    stickies.set(interaction.channel.id, { messageId: sent.id, content: text });
+    const sent = await replaceStickyMessage(channel, prev, text);
+    stickies.set(channelId, { messageId: sent.id, content: text });
     saveStickies();
     await interaction.reply({ content: 'Sticky text updated.', flags: 64 });
     return;
   }
 
-  if (interaction.customId === 'sticky-edit-embed') {
-    const prev = stickies.get(interaction.channel.id);
+  if (action === 'sticky-edit-embed') {
+    const prev = stickies.get(channelId);
     if (!prev || !prev.embed) {
       await interaction.reply({ content: 'No embed sticky set in this channel.', flags: 64 });
       return;
@@ -427,8 +442,8 @@ async function handleModalSubmit(interaction, stickies, saveStickies) {
       field2Value: oldEmbedData.fields?.[1]?.value,
     });
 
-    const sent = await replaceStickyMessage(interaction.channel, prev, { embeds: [embed] });
-    stickies.set(interaction.channel.id, {
+    const sent = await replaceStickyMessage(channel, prev, { embeds: [embed] });
+    stickies.set(channelId, {
       messageId: sent.id,
       content: null,
       embed: true,
