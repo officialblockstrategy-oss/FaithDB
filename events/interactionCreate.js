@@ -72,63 +72,63 @@ function buildStreakEmbed(guildMap, userId) {
 module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client, context) {
-    if (interaction.isButton() && interaction.customId?.startsWith('claim-bump:')) {
-      return handleClaimBump(interaction, context);
-    }
-
-    if (interaction.isButton() && interaction.customId?.startsWith('check-bump-streak:')) {
-      return handleCheckBumpStreak(interaction, context);
-    }
-
-    if (interaction.isButton() && interaction.customId?.startsWith('nav-profile:')) {
-      return handleProfileNavigation(interaction, context, 'profile');
-    }
-
-    if (interaction.isButton() && interaction.customId?.startsWith('nav-streak:')) {
-      return handleProfileNavigation(interaction, context, 'streak');
-    }
-
-    if (
-      interaction.isButton() &&
-      (interaction.customId?.startsWith('quests-nav-left:') || interaction.customId?.startsWith('quests-nav-right:'))
-    ) {
-      return handleQuestNavigation(interaction, context);
-    }
-
-    if (interaction.isButton() && interaction.customId?.startsWith('quests-toggle:')) {
-      return handleQuestToggle(interaction, context);
-    }
-
-    // Handle select menu interactions for reaction role panels first.
-    if (interaction.isStringSelectMenu()) {
-      return handleReactionRoleSelect(interaction, context);
-    }
-
-    // Handle panel modals before command execution.
-    if (interaction.isModalSubmit() && interaction.customId?.startsWith('panel-')) {
-      const panelCommand = client.commands.get('panel');
-      if (panelCommand?.handleModalSubmit) {
-        return panelCommand.handleModalSubmit(interaction, context.panels, context.savePanels);
-      }
-    }
-
-    const commandName = interaction.commandName || interaction.command?.name;
-    if (!commandName) {
-      return;
-    }
-
-    const command = client.commands.get(commandName);
-    if (!command) {
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: 'Unknown command.', flags: 64 });
-      }
-      return;
-    }
-
     try {
+      if (interaction.isButton() && interaction.customId?.startsWith('claim-bump:')) {
+        return handleClaimBump(interaction, context);
+      }
+
+      if (interaction.isButton() && interaction.customId?.startsWith('check-bump-streak:')) {
+        return handleCheckBumpStreak(interaction, context);
+      }
+
+      if (interaction.isButton() && interaction.customId?.startsWith('nav-profile:')) {
+        return handleProfileNavigation(interaction, context, 'profile');
+      }
+
+      if (interaction.isButton() && interaction.customId?.startsWith('nav-streak:')) {
+        return handleProfileNavigation(interaction, context, 'streak');
+      }
+
+      if (
+        interaction.isButton() &&
+        (interaction.customId?.startsWith('quests-nav-left:') || interaction.customId?.startsWith('quests-nav-right:'))
+      ) {
+        return handleQuestNavigation(interaction, context);
+      }
+
+      if (interaction.isButton() && interaction.customId?.startsWith('quests-toggle:')) {
+        return handleQuestToggle(interaction, context);
+      }
+
+      // Handle select menu interactions for reaction role panels first.
+      if (interaction.isStringSelectMenu()) {
+        return handleReactionRoleSelect(interaction, context);
+      }
+
+      // Handle panel modals before command execution.
+      if (interaction.isModalSubmit() && interaction.customId?.startsWith('panel-')) {
+        const panelCommand = client.commands.get('panel');
+        if (panelCommand?.handleModalSubmit) {
+          return panelCommand.handleModalSubmit(interaction, context.panels, context.savePanels);
+        }
+      }
+
+      const commandName = interaction.commandName || interaction.command?.name;
+      if (!commandName) {
+        return;
+      }
+
+      const command = client.commands.get(commandName);
+      if (!command) {
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({ content: 'Unknown command.', flags: 64 });
+        }
+        return;
+      }
+
       await command.execute(interaction, client, context);
     } catch (error) {
-      console.error('Interaction command error:', error);
+      console.error('Interaction error:', error);
       if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({ content: 'Something went wrong.', flags: 64 });
       }
