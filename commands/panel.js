@@ -312,6 +312,8 @@ module.exports.handleAddRole = handleAddRole;
 module.exports.handleRemoveRole = handleRemoveRole;
 module.exports.handleModalSubmit = handleModalSubmit;
 module.exports.parseMessageId = parseMessageId;
+module.exports.buildEmbed = buildEmbed;
+module.exports.buildSelectMenu = buildSelectMenu;
 
 function buildPanelModal(customId, title, values) {
   return new ModalBuilder()
