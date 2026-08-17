@@ -113,6 +113,13 @@ module.exports = {
         }
       }
 
+      if (interaction.isModalSubmit() && interaction.customId?.startsWith('sticky-')) {
+        const stickyCommand = client.commands.get('sticky');
+        if (stickyCommand?.handleModalSubmit) {
+          return stickyCommand.handleModalSubmit(interaction, context.stickies, context.saveStickies);
+        }
+      }
+
       const commandName = interaction.commandName || interaction.command?.name;
       if (!commandName) {
         return;

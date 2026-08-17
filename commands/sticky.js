@@ -1,4 +1,12 @@
-const { ApplicationCommandOptionType, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const {
+  ActionRowBuilder,
+  ApplicationCommandOptionType,
+  EmbedBuilder,
+  ModalBuilder,
+  PermissionFlagsBits,
+  TextInputBuilder,
+  TextInputStyle,
+} = require('discord.js');
 
 // Sticky messages are stored per channel. When a new message arrives in a channel with a sticky,
 // the old sticky message is deleted and reposted so the sticky stays at the bottom of the chat.
@@ -126,7 +134,7 @@ module.exports = {
                 name: 'message',
                 description: 'New sticky text',
                 type: ApplicationCommandOptionType.String,
-                required: true,
+                required: false,
               },
             ],
           },
@@ -253,6 +261,187 @@ module.exports = {
   },
 };
 
+module.exports.handleModalSubmit = handleModalSubmit;
+
+function buildTextStickyModal(value = '') {
+  return new ModalBuilder()
+    .setCustomId('sticky-edit-text')
+    .setTitle('Edit Sticky Text')
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('sticky_text_message')
+          .setLabel('Sticky message')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+          .setValue(value || '')
+      )
+    );
+}
+
+function buildEmbedStickyModal(values) {
+  return new ModalBuilder()
+    .setCustomId('sticky-edit-embed')
+    .setTitle('Edit Sticky Embed')
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('sticky_embed_title')
+          .setLabel('Embed title')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setValue(values.title || '')
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('sticky_embed_description')
+          .setLabel('Embed description')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(false)
+          .setValue(values.description || '')
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('sticky_embed_footer')
+          .setLabel('Footer text (optional)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setValue(values.footerText || '')
+      )
+    );
+}
+
+async function showEditTextModal(interaction, stickies) {
+  const prev = stickies.get(interaction.channel.id);
+
+  if (!prev || prev.embed) {
+    await interaction.reply({ content: 'No text sticky set in this channel.', flags: 64 });
+    return;
+  }
+
+  await interaction.showModal(buildTextStickyModal(prev.content || ''));
+}
+
+async function showEditEmbedModal(interaction, stickies) {
+  const prev = stickies.get(interaction.channel.id);
+
+  if (!prev || !prev.embed) {
+    await interaction.reply({ content: 'No embed sticky set in this channel.', flags: 64 });
+    return;
+  }
+
+  const embedData = prev.embedData || {};
+  await interaction.showModal(buildEmbedStickyModal({
+    title: embedData.title || '',
+    description: embedData.description || '',
+    footerText: embedData.footer?.text || '',
+  }));
+}
+
+async function replaceStickyMessage(channel, prev, sendOptions) {
+  if (prev) {
+    try {
+      const oldMessage = await channel.messages.fetch(prev.messageId);
+      await oldMessage.delete().catch(() => {});
+    } catch {}
+  }
+
+  return channel.send(sendOptions);
+}
+
+function buildStickyEmbed(values) {
+  const embed = new EmbedBuilder()
+    .setTitle(values.title || '')
+    .setDescription(values.description || '');
+
+  if (values.color) {
+    const parsed = String(values.color).replace(/^#/, '');
+    if (/^[0-9A-Fa-f]{6}$/.test(parsed)) {
+      embed.setColor(parseInt(parsed, 16));
+    }
+  }
+
+  if (values.authorName) {
+    embed.setAuthor({ name: values.authorName, iconURL: values.authorIcon || undefined });
+  }
+
+  if (values.thumbnail) {
+    embed.setThumbnail(values.thumbnail);
+  }
+
+  if (values.image) {
+    embed.setImage(values.image);
+  }
+
+  if (values.footerText) {
+    embed.setFooter({ text: values.footerText });
+  }
+
+  if (values.field1Name && values.field1Value) {
+    embed.addFields({ name: values.field1Name, value: values.field1Value, inline: false });
+  }
+
+  if (values.field2Name && values.field2Value) {
+    embed.addFields({ name: values.field2Name, value: values.field2Value, inline: false });
+  }
+
+  return embed;
+}
+
+async function handleModalSubmit(interaction, stickies, saveStickies) {
+  if (interaction.customId === 'sticky-edit-text') {
+    const prev = stickies.get(interaction.channel.id);
+    if (!prev || prev.embed) {
+      await interaction.reply({ content: 'No text sticky set in this channel.', flags: 64 });
+      return;
+    }
+
+    const text = decodeEscapes(interaction.fields.getTextInputValue('sticky_text_message'));
+    const sent = await replaceStickyMessage(interaction.channel, prev, text);
+    stickies.set(interaction.channel.id, { messageId: sent.id, content: text });
+    saveStickies();
+    await interaction.reply({ content: 'Sticky text updated.', flags: 64 });
+    return;
+  }
+
+  if (interaction.customId === 'sticky-edit-embed') {
+    const prev = stickies.get(interaction.channel.id);
+    if (!prev || !prev.embed) {
+      await interaction.reply({ content: 'No embed sticky set in this channel.', flags: 64 });
+      return;
+    }
+
+    const oldEmbedData = prev.embedData || {};
+    const embed = buildStickyEmbed({
+      title: decodeEscapes(interaction.fields.getTextInputValue('sticky_embed_title').trim()) || oldEmbedData.title || '',
+      description: decodeEscapes(interaction.fields.getTextInputValue('sticky_embed_description').trim()) || oldEmbedData.description || '',
+      color: oldEmbedData.color,
+      authorName: oldEmbedData.author?.name,
+      authorIcon: oldEmbedData.author?.icon_url,
+      thumbnail: oldEmbedData.thumbnail?.url,
+      image: oldEmbedData.image?.url,
+      footerText: decodeEscapes(interaction.fields.getTextInputValue('sticky_embed_footer').trim()) || oldEmbedData.footer?.text || null,
+      field1Name: oldEmbedData.fields?.[0]?.name,
+      field1Value: oldEmbedData.fields?.[0]?.value,
+      field2Name: oldEmbedData.fields?.[1]?.name,
+      field2Value: oldEmbedData.fields?.[1]?.value,
+    });
+
+    const sent = await replaceStickyMessage(interaction.channel, prev, { embeds: [embed] });
+    stickies.set(interaction.channel.id, {
+      messageId: sent.id,
+      content: null,
+      embed: true,
+      embedData: embed.toJSON(),
+    });
+    saveStickies();
+    await interaction.reply({ content: 'Embed sticky updated.', flags: 64 });
+    return;
+  }
+
+  await interaction.reply({ content: 'Unknown sticky modal submission.', flags: 64 });
+}
+
 async function handleCreateText(interaction, stickies, saveStickies) {
   const channel = interaction.channel;
   const text = decodeEscapes(interaction.options.getString('message', true));
@@ -273,7 +462,7 @@ async function handleCreateText(interaction, stickies, saveStickies) {
 
 async function handleEditText(interaction, stickies, saveStickies) {
   const channel = interaction.channel;
-  const text = decodeEscapes(interaction.options.getString('message', true));
+  const rawText = interaction.options.getString('message');
   const prev = stickies.get(channel.id);
 
   if (!prev) {
@@ -281,12 +470,14 @@ async function handleEditText(interaction, stickies, saveStickies) {
     return;
   }
 
-  try {
-    const oldMessage = await channel.messages.fetch(prev.messageId);
-    await oldMessage.delete().catch(() => {});
-  } catch {}
+  if (rawText === null) {
+    await showEditTextModal(interaction, stickies);
+    return;
+  }
 
-  const sent = await channel.send(text);
+  const text = decodeEscapes(rawText);
+
+  const sent = await replaceStickyMessage(channel, prev, text);
   stickies.set(channel.id, { messageId: sent.id, content: text });
   saveStickies();
   await interaction.reply({ content: 'Sticky text updated.', flags: 64 });
@@ -308,47 +499,8 @@ async function handleCreateEmbed(interaction, stickies, saveStickies) {
   const field2Value = decodeEscapes(interaction.options.getString('field2_value'));
 
   const prev = stickies.get(channel.id);
-  if (prev) {
-    try {
-      const oldMessage = await channel.messages.fetch(prev.messageId);
-      await oldMessage.delete().catch(() => {});
-    } catch {}
-  }
-
-  const embed = new EmbedBuilder().setTitle(title).setDescription(description);
-
-  if (color) {
-    const parsed = color.replace(/^#/, '');
-    if (/^[0-9A-Fa-f]{6}$/.test(parsed)) {
-      embed.setColor(parseInt(parsed, 16));
-    }
-  }
-
-  if (authorName) {
-    embed.setAuthor({ name: authorName, iconURL: authorIcon || undefined });
-  }
-
-  if (thumbnail) {
-    embed.setThumbnail(thumbnail);
-  }
-
-  if (image) {
-    embed.setImage(image);
-  }
-
-  if (footerText) {
-    embed.setFooter({ text: footerText });
-  }
-
-  if (field1Name && field1Value) {
-    embed.addFields({ name: field1Name, value: field1Value, inline: false });
-  }
-
-  if (field2Name && field2Value) {
-    embed.addFields({ name: field2Name, value: field2Value, inline: false });
-  }
-
-  const sent = await channel.send({ embeds: [embed] });
+  const embed = buildStickyEmbed({ title, description, color, authorName, authorIcon, thumbnail, image, footerText, field1Name, field1Value, field2Name, field2Value });
+  const sent = await replaceStickyMessage(channel, prev, { embeds: [embed] });
   stickies.set(channel.id, {
     messageId: sent.id,
     content: null,
@@ -383,53 +535,41 @@ async function handleEditEmbed(interaction, stickies, saveStickies) {
   const field2Name = decodeEscapes(interaction.options.getString('field2_name'));
   const field2Value = decodeEscapes(interaction.options.getString('field2_value'));
 
+  if (
+    title === null &&
+    description === null &&
+    color === null &&
+    authorName === null &&
+    authorIcon === null &&
+    thumbnail === null &&
+    image === null &&
+    footerText === null &&
+    field1Name === null &&
+    field1Value === null &&
+    field2Name === null &&
+    field2Value === null
+  ) {
+    await showEditEmbedModal(interaction, stickies);
+    return;
+  }
+
   const oldEmbedData = prev.embedData || {};
-  const embed = new EmbedBuilder()
-    .setTitle(title ?? oldEmbedData.title ?? '')
-    .setDescription(description ?? oldEmbedData.description ?? '');
+  const embed = buildStickyEmbed({
+    title: title ?? oldEmbedData.title ?? '',
+    description: description ?? oldEmbedData.description ?? '',
+    color: color ?? oldEmbedData.color,
+    authorName: authorName ?? oldEmbedData.author?.name,
+    authorIcon: authorIcon ?? oldEmbedData.author?.icon_url,
+    thumbnail: thumbnail ?? oldEmbedData.thumbnail?.url,
+    image: image ?? oldEmbedData.image?.url,
+    footerText: footerText ?? oldEmbedData.footer?.text,
+    field1Name: field1Name ?? oldEmbedData.fields?.[0]?.name,
+    field1Value: field1Value ?? oldEmbedData.fields?.[0]?.value,
+    field2Name: field2Name ?? oldEmbedData.fields?.[1]?.name,
+    field2Value: field2Value ?? oldEmbedData.fields?.[1]?.value,
+  });
 
-  const resolvedColor = color ?? oldEmbedData.color;
-  if (resolvedColor) {
-    const parsed = String(resolvedColor).replace(/^#/, '');
-    if (/^[0-9A-Fa-f]{6}$/.test(parsed)) {
-      embed.setColor(parseInt(parsed, 16));
-    }
-  }
-
-  if (authorName || oldEmbedData.author) {
-    embed.setAuthor({ name: authorName || oldEmbedData.author?.name || undefined, iconURL: authorIcon || oldEmbedData.author?.icon_url || undefined });
-  }
-
-  if (thumbnail || oldEmbedData.thumbnail) {
-    embed.setThumbnail(thumbnail || oldEmbedData.thumbnail?.url);
-  }
-
-  if (image || oldEmbedData.image) {
-    embed.setImage(image || oldEmbedData.image?.url);
-  }
-
-  if (footerText || oldEmbedData.footer) {
-    embed.setFooter({ text: footerText || oldEmbedData.footer?.text || undefined });
-  }
-
-  const resolvedField1Name = field1Name ?? oldEmbedData.fields?.[0]?.name;
-  const resolvedField1Value = field1Value ?? oldEmbedData.fields?.[0]?.value;
-  if (resolvedField1Name && resolvedField1Value) {
-    embed.addFields({ name: resolvedField1Name, value: resolvedField1Value, inline: false });
-  }
-
-  const resolvedField2Name = field2Name ?? oldEmbedData.fields?.[1]?.name;
-  const resolvedField2Value = field2Value ?? oldEmbedData.fields?.[1]?.value;
-  if (resolvedField2Name && resolvedField2Value) {
-    embed.addFields({ name: resolvedField2Name, value: resolvedField2Value, inline: false });
-  }
-
-  try {
-    const oldMessage = await channel.messages.fetch(prev.messageId);
-    await oldMessage.delete().catch(() => {});
-  } catch {}
-
-  const sent = await channel.send({ embeds: [embed] });
+  const sent = await replaceStickyMessage(channel, prev, { embeds: [embed] });
   stickies.set(channel.id, {
     messageId: sent.id,
     content: null,
