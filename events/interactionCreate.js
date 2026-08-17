@@ -297,10 +297,18 @@ async function handleReactionRoleSelect(interaction, context) {
   const toRemove = currentRoleIds.filter((id) => !selectedRoleIds.includes(id) && member.roles.cache.has(id));
 
   const results = [];
+  const { buildQuestEngine } = require('../services/questEngine');
+  const guildQuestState = context.quests?.get(interaction.guildId) || { catalog: new Map(), memberProgress: new Map() };
+  const questEngine = buildQuestEngine(guildQuestState);
   for (const roleId of toAdd) {
     try {
       await member.roles.add(roleId);
       results.push(`Added <@&${roleId}>`);
+      questEngine.recordRole({ userId: member.id, roleId, now: Date.now() });
+      if (context.quests) {
+        context.quests.set(interaction.guildId, questEngine.state);
+        context.saveQuests?.();
+      }
     } catch (error) {
       console.warn('Failed to add reaction role:', error);
     }

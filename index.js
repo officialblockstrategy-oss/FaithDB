@@ -272,6 +272,11 @@ for (const file of eventFiles) {
   }
 }
 
+client.once('clientReady', () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  startVeriPurgeLoop(client, verify, saveVerify);
+});
+
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
   startVeriPurgeLoop(client, verify, saveVerify);

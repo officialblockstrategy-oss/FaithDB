@@ -1,5 +1,6 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { render } = require('../utils/tpl');
+const { buildQuestEngine } = require('../services/questEngine');
 const {
   addKudosEntry,
   calculateConversationKudos,
@@ -113,7 +114,7 @@ const processedBumpMessages = new Set();
 
 module.exports = {
   name: 'messageCreate',
-  async execute(message, client, { stickies, saveStickies, verify, followups, bumpDetection, saveBumpDetection, kudos, saveKudos }) {
+  async execute(message, client, { stickies, saveStickies, verify, followups, bumpDetection, saveBumpDetection, kudos, saveKudos, quests, saveQuests }) {
     if (!message.guild) return;
 
     const config = getConfiguredBumpDetection(message.guild.id, bumpDetection);
@@ -125,6 +126,8 @@ module.exports = {
 
     const guildMap = kudos.get(message.guild.id) || new Map();
     const now = Date.now();
+    const guildQuestState = quests.get(message.guild.id) || { catalog: new Map(), memberProgress: new Map() };
+    const questEngine = buildQuestEngine(guildQuestState);
 
     if (isConfiguredBumpSource && isValidConfiguredBump(message, config)) {
       if (processedBumpMessages.has(message.id)) {
@@ -168,6 +171,19 @@ module.exports = {
       saveKudos();
     }
 
+    if (message.content) {
+      questEngine.recordMessage({
+        userId: message.author.id,
+        channelId: message.channel.id,
+        otherUserId: message.mentions?.users?.first()?.id || null,
+        content: message.content,
+        now,
+      });
+      questEngine.recordDailyActivity({ userId: message.author.id, day: new Date(now).toISOString().slice(0, 10), now });
+      quests.set(message.guild.id, questEngine.state);
+      saveQuests();
+    }
+
     if (message.reference && message.content && isThankYouMessage(message.content)) {
       const targetMessage = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
       const targetUser = targetMessage?.author;
@@ -187,6 +203,9 @@ module.exports = {
         guildMap.set(targetUser.id, targetProfile);
         kudos.set(message.guild.id, guildMap);
         saveKudos();
+
+        // Gratitude responses are tracked as social feedback, but they do not satisfy the
+        // explicit kudos achievements. Only the manual kudos command should advance those quests.
       }
     }
 

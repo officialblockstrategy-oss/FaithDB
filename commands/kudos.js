@@ -1,4 +1,5 @@
 const { ApplicationCommandOptionType } = require('discord.js');
+const { buildQuestEngine } = require('../services/questEngine');
 const { addKudosEntry, getGuildKudos } = require('../services/kudosService');
 
 module.exports = {
@@ -29,7 +30,7 @@ module.exports = {
     ],
   },
 
-  async execute(interaction, client, { kudos, saveKudos }) {
+  async execute(interaction, client, { kudos, saveKudos, quests, saveQuests }) {
     if (!interaction.inGuild()) {
       await interaction.reply({ content: 'This command must be used in a server.', flags: 64 });
       return;
@@ -82,6 +83,12 @@ module.exports = {
 
     kudos.set(interaction.guildId, guildMap);
     saveKudos();
+
+    const guildQuestState = quests.get(interaction.guildId) || { catalog: new Map(), memberProgress: new Map() };
+    const questEngine = buildQuestEngine(guildQuestState);
+    questEngine.recordKudos({ giverId: interaction.user.id, targetId: target.id, source: 'manual', now });
+    quests.set(interaction.guildId, questEngine.state);
+    saveQuests();
 
     await interaction.reply({ content: `${target.tag} earned ${amount} Kudos for: ${reason}`, flags: 64 });
   },
