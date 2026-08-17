@@ -585,8 +585,14 @@ async function handleCreate(interaction, panels, savePanels) {
 async function handleAddRole(interaction, panels, savePanels) {
   const rawId = interaction.options.getString('message_id', true);
   const messageId = parseMessageId(rawId);
-  const role = interaction.options.getRole('role', true);
-  const label = interaction.options.getString('label') || role.name;
+  const rolesToAdd = [
+    interaction.options.getRole('role', true),
+    interaction.options.getRole('role_2'),
+    interaction.options.getRole('role_3'),
+    interaction.options.getRole('role_4'),
+    interaction.options.getRole('role_5'),
+  ].filter(Boolean);
+  const primaryLabel = interaction.options.getString('label');
 
   if (!messageId) {
     await interaction.reply({ content: 'Please provide a valid message ID or link.', flags: 64 });
@@ -599,12 +605,28 @@ async function handleAddRole(interaction, panels, savePanels) {
     return;
   }
 
-  if (config.roles.some((entry) => entry.roleId === role.id)) {
-    await interaction.reply({ content: 'That role is already included in this panel.', flags: 64 });
+  const uniqueRoles = [];
+  const seenRoleIds = new Set();
+  for (const role of rolesToAdd) {
+    if (seenRoleIds.has(role.id)) continue;
+    seenRoleIds.add(role.id);
+    uniqueRoles.push(role);
+  }
+
+  const alreadyIncluded = uniqueRoles.filter((role) => config.roles.some((entry) => entry.roleId === role.id));
+  const newRoles = uniqueRoles.filter((role) => !config.roles.some((entry) => entry.roleId === role.id));
+
+  if (newRoles.length === 0) {
+    const duplicateNames = alreadyIncluded.map((role) => role.name).join(', ');
+    await interaction.reply({ content: duplicateNames ? `${duplicateNames} ${alreadyIncluded.length === 1 ? 'is' : 'are'} already included in this panel.` : 'Those roles are already included in this panel.', flags: 64 });
     return;
   }
 
-  config.roles.push({ roleId: role.id, label, description: `Grant ${label}` });
+  for (const role of newRoles) {
+    const label = role.id === uniqueRoles[0].id && primaryLabel ? primaryLabel : role.name;
+    config.roles.push({ roleId: role.id, label, description: `Grant ${label}` });
+  }
+
   const refreshed = await refreshPanelMessage(interaction, config, panels, savePanels);
   if (!refreshed) {
     await interaction.reply({ content: 'The panel message no longer exists and was removed from storage.', flags: 64 });
@@ -612,7 +634,11 @@ async function handleAddRole(interaction, panels, savePanels) {
   }
 
   savePanels();
-  await interaction.reply({ content: `Added ${role.name} to the reaction role panel.`, flags: 64 });
+  const addedNames = newRoles.map((role) => role.name).join(', ');
+  const skippedNotice = alreadyIncluded.length
+    ? ` Skipped already included: ${alreadyIncluded.map((role) => role.name).join(', ')}.`
+    : '';
+  await interaction.reply({ content: `Added ${addedNames} to the reaction role panel.${skippedNotice}`, flags: 64 });
 }
 
 // Remove a role from an existing reaction role panel and delete the panel if there are no roles left.

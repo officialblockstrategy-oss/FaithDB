@@ -33,6 +33,30 @@ module.exports = {
                 required: true,
               },
               {
+                name: 'role_2',
+                description: 'Optional second role to add',
+                type: ApplicationCommandOptionType.Role,
+                required: false,
+              },
+              {
+                name: 'role_3',
+                description: 'Optional third role to add',
+                type: ApplicationCommandOptionType.Role,
+                required: false,
+              },
+              {
+                name: 'role_4',
+                description: 'Optional fourth role to add',
+                type: ApplicationCommandOptionType.Role,
+                required: false,
+              },
+              {
+                name: 'role_5',
+                description: 'Optional fifth role to add',
+                type: ApplicationCommandOptionType.Role,
+                required: false,
+              },
+              {
                 name: 'label',
                 description: 'Optional custom label for the role',
                 type: ApplicationCommandOptionType.String,
