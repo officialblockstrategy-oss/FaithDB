@@ -33,6 +33,8 @@ const kudos = new Map();
 const kudosFile = path.join(dataDir, 'kudos.json');
 const quests = new Map();
 const questsFile = path.join(dataDir, 'quests.json');
+const commandAccess = new Map();
+const commandAccessFile = path.join(dataDir, 'command-access.json');
 
 function loadStickies() {
   const loaded = loadMap(stickiesFile, (sticky) => sticky && typeof sticky.content === 'string');
@@ -230,6 +232,26 @@ function saveQuests() {
   saveJson(questsFile, data);
 }
 
+function loadCommandAccess() {
+  const loaded = loadMap(commandAccessFile, (cfg) => cfg && typeof cfg === 'object');
+  for (const [guildId, cfg] of loaded) {
+    const panelUsers = Array.isArray(cfg?.panel?.users) ? cfg.panel.users.filter((id) => typeof id === 'string') : [];
+    const panelRoles = Array.isArray(cfg?.panel?.roles) ? cfg.panel.roles.filter((id) => typeof id === 'string') : [];
+    const stickyUsers = Array.isArray(cfg?.sticky?.users) ? cfg.sticky.users.filter((id) => typeof id === 'string') : [];
+    const stickyRoles = Array.isArray(cfg?.sticky?.roles) ? cfg.sticky.roles.filter((id) => typeof id === 'string') : [];
+
+    commandAccess.set(guildId, {
+      panel: { users: [...new Set(panelUsers)], roles: [...new Set(panelRoles)] },
+      sticky: { users: [...new Set(stickyUsers)], roles: [...new Set(stickyRoles)] },
+    });
+  }
+  console.log(`Loaded ${commandAccess.size} command access profile(s) from disk.`);
+}
+
+function saveCommandAccess() {
+  saveMap(commandAccessFile, commandAccess);
+}
+
 // Load command modules from the commands directory and collect command definitions.
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
@@ -248,6 +270,7 @@ loadVerify();
 loadBumpDetection();
 loadKudos();
 loadQuests();
+loadCommandAccess();
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
 (async () => {
@@ -264,7 +287,26 @@ const eventsPath = path.join(__dirname, 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter((file) => file.endsWith('.js'));
 for (const file of eventFiles) {
   const event = require(path.join(eventsPath, file));
-  const context = { stickies, saveStickies, panels, savePanels, greetings, saveGreetings, followups, saveFollowups, verify, saveVerify, bumpDetection, saveBumpDetection, kudos, saveKudos, quests, saveQuests };
+  const context = {
+    stickies,
+    saveStickies,
+    panels,
+    savePanels,
+    greetings,
+    saveGreetings,
+    followups,
+    saveFollowups,
+    verify,
+    saveVerify,
+    bumpDetection,
+    saveBumpDetection,
+    kudos,
+    saveKudos,
+    quests,
+    saveQuests,
+    commandAccess,
+    saveCommandAccess,
+  };
   if (event.once) {
     client.once(event.name, (...args) => event.execute(...args, client, context));
   } else {

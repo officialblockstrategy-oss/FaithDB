@@ -18,11 +18,60 @@ function getStickyChannelId(interaction) {
   return interaction.channelId || interaction.channel?.id || null;
 }
 
+function getGuildStickyAccess(commandAccess, guildId) {
+  const defaults = { users: [], roles: [] };
+  if (!guildId || !commandAccess?.get) return defaults;
+
+  const stored = commandAccess.get(guildId);
+  const sticky = stored && typeof stored === 'object' ? stored.sticky : null;
+  return {
+    users: Array.isArray(sticky?.users) ? sticky.users : [],
+    roles: Array.isArray(sticky?.roles) ? sticky.roles : [],
+  };
+}
+
+function getMemberRoleIds(interaction) {
+  const roleCache = interaction.member?.roles?.cache;
+  if (roleCache?.size) {
+    return [...roleCache.keys()];
+  }
+
+  const rawRoles = interaction.member?.roles;
+  if (Array.isArray(rawRoles)) {
+    return rawRoles;
+  }
+
+  return [];
+}
+
+function canManageStickies(interaction, commandAccess) {
+  const effectivePermissions = interaction.memberPermissions || interaction.member?.permissions;
+
+  if (
+    interaction.inGuild() &&
+    effectivePermissions?.has(PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageMessages)
+  ) {
+    return true;
+  }
+
+  if (!interaction.inGuild()) {
+    return false;
+  }
+
+  const access = getGuildStickyAccess(commandAccess, interaction.guildId);
+  if (access.users.includes(interaction.user.id)) {
+    return true;
+  }
+
+  const memberRoleIds = getMemberRoleIds(interaction);
+  return memberRoleIds.some((roleId) => access.roles.includes(roleId));
+}
+
 module.exports = {
   data: {
     name: 'sticky',
     description: 'Manage sticky messages for this channel',
-    default_member_permissions: PermissionFlagsBits.ManageGuild.toString(),
+    default_member_permissions: null,
     dm_permission: false,
     options: [
       {
@@ -231,7 +280,15 @@ module.exports = {
     ],
   },
 
-  async execute(interaction, client, { stickies, saveStickies }) {
+  async execute(interaction, client, { stickies, saveStickies, commandAccess }) {
+    if (!canManageStickies(interaction, commandAccess)) {
+      await interaction.reply({
+        content: 'You need Manage Server, Manage Messages, or granted sticky access to use this command.',
+        flags: 64,
+      });
+      return;
+    }
+
     // Sticky command routes to creating text or embed stickies, or deleting the current sticky.
     const group = interaction.options.getSubcommandGroup(false);
     const subcommand = interaction.options.getSubcommand();
@@ -394,7 +451,15 @@ function buildStickyEmbed(values) {
   return embed;
 }
 
-async function handleModalSubmit(interaction, stickies, saveStickies) {
+async function handleModalSubmit(interaction, stickies, saveStickies, commandAccess) {
+  if (!canManageStickies(interaction, commandAccess)) {
+    await interaction.reply({
+      content: 'You need Manage Server, Manage Messages, or granted sticky access to update stickies.',
+      flags: 64,
+    });
+    return;
+  }
+
   const [action, targetChannelId] = interaction.customId.split(':');
   const channelId = targetChannelId || getStickyChannelId(interaction);
   const channel = channelId ? await interaction.client.channels.fetch(channelId).catch(() => null) : null;

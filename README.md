@@ -101,6 +101,12 @@ The goal is to keep the feature set small, predictable, and easy to maintain.
 - `edit embed` — edit the sticky embed
 - `delete` — delete the sticky in the current channel
 
+### `/grant access`
+- `action` — add, remove, or list access overrides
+- `feature` — panel, sticky, or both
+- `user` or `role` — one target to grant/revoke (not needed for list)
+- lets admins delegate panel/sticky usage without granting Manage Messages
+
 ### `/veri-purge`
 - `enable <days>` — kick unverified users after they remain unverified for that many days
 - `warn <hours-left> <text>` — send a DM warning when the purge is close
@@ -175,3 +181,4 @@ This directory is intentionally local runtime state and is not committed to Git.
 - `verify.json` — verification settings and clean-channel config
 - `kudos.json` — member kudos totals and related metrics
 - `quests.json` — quest definitions and per-user progress tracking
+- `command-access.json` — per-guild user/role allowlists for panel/sticky access

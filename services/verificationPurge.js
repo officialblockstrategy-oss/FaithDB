@@ -1,6 +1,14 @@
+let purgeLoopStarted = false;
+
 async function runVeriPurgeCheck(client, verify, saveVerify) {
   for (const [guildId, cfg] of verify.entries()) {
     if (!cfg || !Number.isFinite(Number(cfg.purgeDays)) || Number(cfg.purgeDays) <= 0) {
+      continue;
+    }
+
+    // Safety guard: do not run purge logic unless a verified role is configured.
+    if ((cfg.purgeEnabled === true || cfg.purgeWarnEnabled === true) && !cfg.roleId) {
+      console.warn(`Skipping verification purge for guild ${guildId}: no verified role configured.`);
       continue;
     }
 
@@ -15,8 +23,19 @@ async function runVeriPurgeCheck(client, verify, saveVerify) {
     const warnedUsers = cfg.warnedUsers && typeof cfg.warnedUsers === 'object' ? cfg.warnedUsers : {};
     const now = Date.now();
 
+    // Pull full member data so large guilds are not limited by cache size.
+    try {
+      await guild.members.fetch();
+    } catch (error) {
+      console.warn(`Could not fetch members for purge in guild ${guildId}:`, error);
+    }
+
     for (const member of guild.members.cache.values()) {
       if (member.user.bot) continue;
+      if (cfg.roleId && member.roles.cache.has(cfg.roleId)) {
+        if (warnedUsers[member.id]) delete warnedUsers[member.id];
+        continue;
+      }
       if (member.roles.cache.size > 1) continue;
       if (!member.joinedAt) continue;
 
@@ -57,6 +76,16 @@ async function runVeriPurgeCheck(client, verify, saveVerify) {
 }
 
 function startVeriPurgeLoop(client, verify, saveVerify) {
+  if (purgeLoopStarted) {
+    return;
+  }
+  purgeLoopStarted = true;
+
+  // Run once at startup so the first check is immediate instead of waiting an hour.
+  runVeriPurgeCheck(client, verify, saveVerify).catch((error) => {
+    console.error('Initial veri purge check failed:', error);
+  });
+
   setInterval(() => {
     runVeriPurgeCheck(client, verify, saveVerify).catch((error) => {
       console.error('Veri purge check failed:', error);

@@ -24,11 +24,54 @@ function decodeEscapes(value) {
   return typeof value === 'string' ? value.replace(/\\n/g, '\n') : value;
 }
 
+function getGuildPanelAccess(commandAccess, guildId) {
+  const defaults = { users: [], roles: [] };
+  if (!guildId || !commandAccess?.get) return defaults;
+
+  const stored = commandAccess.get(guildId);
+  const panel = stored && typeof stored === 'object' ? stored.panel : null;
+  return {
+    users: Array.isArray(panel?.users) ? panel.users : [],
+    roles: Array.isArray(panel?.roles) ? panel.roles : [],
+  };
+}
+
+function getMemberRoleIds(interaction) {
+  const roleCache = interaction.member?.roles?.cache;
+  if (roleCache?.size) {
+    return [...roleCache.keys()];
+  }
+
+  const rawRoles = interaction.member?.roles;
+  if (Array.isArray(rawRoles)) {
+    return rawRoles;
+  }
+
+  return [];
+}
+
+function canManagePanels(interaction, commandAccess) {
+  if (!interaction.inGuild()) return false;
+
+  const effectivePermissions = interaction.memberPermissions || interaction.member?.permissions;
+  if (effectivePermissions?.has(PermissionFlagsBits.ManageRoles | PermissionFlagsBits.ManageMessages)) {
+    return true;
+  }
+
+  const access = getGuildPanelAccess(commandAccess, interaction.guildId);
+  if (access.users.includes(interaction.user.id)) {
+    return true;
+  }
+
+  const memberRoleIds = getMemberRoleIds(interaction);
+  return memberRoleIds.some((roleId) => access.roles.includes(roleId));
+}
+
 module.exports = {
   data: {
     name: 'panel',
     description: 'Manage reaction role panels',
-    default_member_permissions: PermissionFlagsBits.ManageRoles.toString(),
+    default_member_permissions: null,
     dm_permission: false,
     options: [
       {
@@ -216,9 +259,12 @@ module.exports = {
     ],
   },
 
-  async execute(interaction, client, { panels, savePanels }) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-      await interaction.reply({ content: 'You need Manage Roles permission to use this command.', flags: 64 });
+  async execute(interaction, client, { panels, savePanels, commandAccess }) {
+    if (!canManagePanels(interaction, commandAccess)) {
+      await interaction.reply({
+        content: 'You need Manage Roles, Manage Messages, or granted panel access to use this command.',
+        flags: 64,
+      });
       return;
     }
 
@@ -445,7 +491,15 @@ async function createPanelFromValues(interaction, panels, savePanels, config) {
   await interaction.reply({ content: 'Reaction role panel created.', flags: 64 });
 }
 
-async function handleModalSubmit(interaction, panels, savePanels) {
+async function handleModalSubmit(interaction, panels, savePanels, commandAccess) {
+  if (!canManagePanels(interaction, commandAccess)) {
+    await interaction.reply({
+      content: 'You need Manage Roles, Manage Messages, or granted panel access to update panels.',
+      flags: 64,
+    });
+    return;
+  }
+
   const [action, messageId] = interaction.customId.split(':');
 
   if (action === 'panel-create') {

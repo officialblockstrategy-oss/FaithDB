@@ -102,6 +102,14 @@ module.exports = {
       return;
     }
 
+    if (!current.roleId) {
+      await interaction.reply({
+        content: 'Set up verification first with /verify setup so I know which role counts as verified.',
+        flags: 64,
+      });
+      return;
+    }
+
     verify.set(interaction.guildId, {
       ...current,
       purgeEnabled: true,

@@ -109,14 +109,24 @@ module.exports = {
       if (interaction.isModalSubmit() && interaction.customId?.startsWith('panel-')) {
         const panelCommand = client.commands.get('panel');
         if (panelCommand?.handleModalSubmit) {
-          return panelCommand.handleModalSubmit(interaction, context.panels, context.savePanels);
+          return panelCommand.handleModalSubmit(
+            interaction,
+            context.panels,
+            context.savePanels,
+            context.commandAccess
+          );
         }
       }
 
       if (interaction.isModalSubmit() && interaction.customId?.startsWith('sticky-')) {
         const stickyCommand = client.commands.get('sticky');
         if (stickyCommand?.handleModalSubmit) {
-          return stickyCommand.handleModalSubmit(interaction, context.stickies, context.saveStickies);
+          return stickyCommand.handleModalSubmit(
+            interaction,
+            context.stickies,
+            context.saveStickies,
+            context.commandAccess
+          );
         }
       }
 
