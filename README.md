@@ -39,6 +39,7 @@ The goal is to keep the feature set small, predictable, and easy to maintain.
 1. Copy `.env.example` to `.env` and fill in your own values:
    - `BOT_TOKEN`
    - `CLIENT_ID`
+   - `DATA_DIR` (optional, recommended in production; example: `/var/lib/faithdb-data`)
 2. Install dependencies:
    ```bash
    npm install
@@ -171,6 +172,8 @@ The current implementation provides the infrastructure layer; actual quest defin
 ## Data Storage
 
 Persistent bot state sits under `data/`:
+
+If `DATA_DIR` is set, the bot uses that folder instead of the local `data/` path. This is recommended for deployments where the repo directory is frequently reset.
 
 This directory is intentionally local runtime state and is not committed to Git.
 

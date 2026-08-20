@@ -12,10 +12,11 @@ const client = new Client({
 });
 client.commands = new Collection();
 
-const dataDir = path.join(__dirname, 'data');
+const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, 'data');
 const { ensureFolder, loadJson, saveJson, loadMap, saveMap } = require('./utils/storage');
 
 ensureFolder(dataDir);
+console.log(`Using data directory: ${dataDir}`);
 
 const stickies = new Map();
 const stickiesFile = path.join(dataDir, 'stickies.json');
@@ -37,7 +38,16 @@ const commandAccess = new Map();
 const commandAccessFile = path.join(dataDir, 'command-access.json');
 
 function loadStickies() {
-  const loaded = loadMap(stickiesFile, (sticky) => sticky && typeof sticky.content === 'string');
+  const loaded = loadMap(
+    stickiesFile,
+    (sticky) =>
+      sticky &&
+      typeof sticky.messageId === 'string' &&
+      (
+        typeof sticky.content === 'string' ||
+        (sticky.embed === true && sticky.embedData && typeof sticky.embedData === 'object')
+      )
+  );
   for (const [channelId, sticky] of loaded) stickies.set(channelId, sticky);
   console.log(`Loaded ${stickies.size} sticky(s) from disk.`);
 }
