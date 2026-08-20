@@ -67,6 +67,87 @@ function canManageStickies(interaction, commandAccess) {
   return memberRoleIds.some((roleId) => access.roles.includes(roleId));
 }
 
+function normalizeStickyAccessBlock(commandAccess, guildId) {
+  const current = commandAccess.get(guildId);
+  const panel = current?.panel && typeof current.panel === 'object' ? current.panel : {};
+  const sticky = current?.sticky && typeof current.sticky === 'object' ? current.sticky : {};
+
+  return {
+    panel: {
+      users: Array.isArray(panel.users) ? [...new Set(panel.users.filter((id) => typeof id === 'string'))] : [],
+      roles: Array.isArray(panel.roles) ? [...new Set(panel.roles.filter((id) => typeof id === 'string'))] : [],
+    },
+    sticky: {
+      users: Array.isArray(sticky.users) ? [...new Set(sticky.users.filter((id) => typeof id === 'string'))] : [],
+      roles: Array.isArray(sticky.roles) ? [...new Set(sticky.roles.filter((id) => typeof id === 'string'))] : [],
+    },
+  };
+}
+
+function formatStickyAccessSummary(access) {
+  const users = access.sticky.users.length ? access.sticky.users.map((id) => `<@${id}>`).join(', ') : 'none';
+  const roles = access.sticky.roles.length ? access.sticky.roles.map((id) => `<@&${id}>`).join(', ') : 'none';
+  return `Sticky access overrides\nUsers: ${users}\nRoles: ${roles}`;
+}
+
+async function handleStickyGrantAccess(interaction, commandAccess, saveCommandAccess) {
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    await interaction.reply({ content: 'You need Manage Server permission to change sticky access grants.', flags: 64 });
+    return;
+  }
+
+  const user = interaction.options.getUser('user');
+  const role = interaction.options.getRole('role');
+  const revoke = interaction.options.getBoolean('revoke') || false;
+
+  const access = normalizeStickyAccessBlock(commandAccess, interaction.guildId);
+
+  if (!user && !role) {
+    await interaction.reply({ content: formatStickyAccessSummary(access), flags: 64 });
+    return;
+  }
+
+  if (user && role) {
+    await interaction.reply({ content: 'Choose either a user or a role, not both.', flags: 64 });
+    return;
+  }
+
+  if (user) {
+    const hasAccess = access.sticky.users.includes(user.id);
+    if (revoke) {
+      access.sticky.users = access.sticky.users.filter((id) => id !== user.id);
+      commandAccess.set(interaction.guildId, access);
+      saveCommandAccess();
+      await interaction.reply({ content: hasAccess ? `Removed sticky access from <@${user.id}>.` : `<@${user.id}> does not currently have sticky access.`, flags: 64 });
+      return;
+    }
+
+    if (!hasAccess) {
+      access.sticky.users.push(user.id);
+      commandAccess.set(interaction.guildId, access);
+      saveCommandAccess();
+    }
+    await interaction.reply({ content: hasAccess ? `<@${user.id}> already has sticky access.` : `Granted sticky access to <@${user.id}>.`, flags: 64 });
+    return;
+  }
+
+  const hasAccess = access.sticky.roles.includes(role.id);
+  if (revoke) {
+    access.sticky.roles = access.sticky.roles.filter((id) => id !== role.id);
+    commandAccess.set(interaction.guildId, access);
+    saveCommandAccess();
+    await interaction.reply({ content: hasAccess ? `Removed sticky access from <@&${role.id}>.` : `<@&${role.id}> does not currently have sticky access.`, flags: 64 });
+    return;
+  }
+
+  if (!hasAccess) {
+    access.sticky.roles.push(role.id);
+    commandAccess.set(interaction.guildId, access);
+    saveCommandAccess();
+  }
+  await interaction.reply({ content: hasAccess ? `<@&${role.id}> already has sticky access.` : `Granted sticky access to <@&${role.id}>.`, flags: 64 });
+}
+
 module.exports = {
   data: {
     name: 'sticky',
@@ -277,10 +358,50 @@ module.exports = {
         description: 'Delete the stickied message in this channel',
         type: ApplicationCommandOptionType.Subcommand,
       },
+      {
+        name: 'grant',
+        description: 'Grant or revoke sticky command access for a user or role',
+        type: ApplicationCommandOptionType.SubcommandGroup,
+        options: [
+          {
+            name: 'access',
+            description: 'Grant or revoke sticky access, or list current access if no target is provided',
+            type: ApplicationCommandOptionType.Subcommand,
+            options: [
+              {
+                name: 'user',
+                description: 'User to grant sticky access to',
+                type: ApplicationCommandOptionType.User,
+                required: false,
+              },
+              {
+                name: 'role',
+                description: 'Role to grant sticky access to',
+                type: ApplicationCommandOptionType.Role,
+                required: false,
+              },
+              {
+                name: 'revoke',
+                description: 'Set true to revoke access instead of granting it',
+                type: ApplicationCommandOptionType.Boolean,
+                required: false,
+              },
+            ],
+          },
+        ],
+      },
     ],
   },
 
-  async execute(interaction, client, { stickies, saveStickies, commandAccess }) {
+  async execute(interaction, client, { stickies, saveStickies, commandAccess, saveCommandAccess }) {
+    const group = interaction.options.getSubcommandGroup(false);
+    const subcommand = interaction.options.getSubcommand();
+
+    if (group === 'grant' && subcommand === 'access') {
+      await handleStickyGrantAccess(interaction, commandAccess, saveCommandAccess);
+      return;
+    }
+
     if (!canManageStickies(interaction, commandAccess)) {
       await interaction.reply({
         content: 'You need Manage Server, Manage Messages, or granted sticky access to use this command.',
@@ -290,8 +411,6 @@ module.exports = {
     }
 
     // Sticky command routes to creating text or embed stickies, or deleting the current sticky.
-    const group = interaction.options.getSubcommandGroup(false);
-    const subcommand = interaction.options.getSubcommand();
 
     if (group === 'create' && subcommand === 'text') {
       await handleCreateText(interaction, stickies, saveStickies);

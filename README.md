@@ -83,6 +83,7 @@ The goal is to keep the feature set small, predictable, and easy to maintain.
 - `edit` — edit an existing panel
 - `delete` — delete a panel
 - `dashboard` — show active panels in this server
+- `grant access` — grant or revoke panel access for a user or role (leave user/role empty to list current panel grants)
 
 ### `/rr`
 - `add role` — add a role to an existing panel
@@ -101,12 +102,7 @@ The goal is to keep the feature set small, predictable, and easy to maintain.
 - `edit text` — edit the sticky text
 - `edit embed` — edit the sticky embed
 - `delete` — delete the sticky in the current channel
-
-### `/grant access`
-- `action` — add, remove, or list access overrides
-- `feature` — panel, sticky, or both
-- `user` or `role` — one target to grant/revoke (not needed for list)
-- lets admins delegate panel/sticky usage without granting Manage Messages
+- `grant access` — grant or revoke sticky access for a user or role (leave user/role empty to list current sticky grants)
 
 ### `/veri-purge`
 - `enable <days>` — kick unverified users after they remain unverified for that many days

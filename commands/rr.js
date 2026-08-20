@@ -7,7 +7,7 @@ module.exports = {
   data: {
     name: 'rr',
     description: 'Manage reaction roles',
-    default_member_permissions: PermissionFlagsBits.ManageRoles.toString(),
+    default_member_permissions: null,
     dm_permission: false,
     options: [
       {
@@ -97,8 +97,11 @@ module.exports = {
 
   async execute(interaction, client, context) {
     // Wrapper command for adding or removing roles from an existing reaction role panel.
-    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-      await interaction.reply({ content: 'You need Manage Roles permission to use this command.', flags: 64 });
+    if (!panel.canManagePanels(interaction, context.commandAccess)) {
+      await interaction.reply({
+        content: 'You need Manage Roles, Manage Messages, or granted panel access to use this command.',
+        flags: 64,
+      });
       return;
     }
 

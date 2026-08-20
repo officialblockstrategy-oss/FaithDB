@@ -5,7 +5,7 @@ module.exports = {
   data: {
     name: 'panels',
     description: 'Manage saved reaction role panels',
-    default_member_permissions: PermissionFlagsBits.ManageRoles.toString(),
+    default_member_permissions: null,
     dm_permission: false,
     options: [
       {
@@ -25,8 +25,11 @@ module.exports = {
   },
 
   async execute(interaction, client, context) {
-    if (!interaction.inGuild() || !interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-      await interaction.reply({ content: 'You need Manage Roles permission to use this command.', flags: 64 });
+    if (!panel.canManagePanels(interaction, context.commandAccess)) {
+      await interaction.reply({
+        content: 'You need Manage Roles, Manage Messages, or granted panel access to use this command.',
+        flags: 64,
+      });
       return;
     }
 
