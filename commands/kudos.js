@@ -1,4 +1,4 @@
-const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { buildQuestEngine } = require('../services/questEngine');
 const { addKudosEntry, getGuildKudos } = require('../services/kudosService');
 
@@ -68,7 +68,7 @@ module.exports = {
       return;
     }
 
-    const amount = 6;
+    const amount = 10;
     addKudosEntry(guildMap, target.id, amount, 'manual', `Awarded by ${interaction.user.id}: ${reason}`, now);
     const updated = getGuildKudos(guildMap, target.id);
     updated.manual = { ...(updated.manual || {}), lastAt: now, reason };
@@ -91,12 +91,19 @@ module.exports = {
       .setColor(0xEB583B)
       .setTitle('Thanks Sent')
       .setDescription(`${interaction.user} has thanked ${target} for ${reason}`)
-      .addFields({ name: 'Kudos Awarded', value: `${amount}`, inline: true })
       .setFooter({ text: 'This message will disappear in 30 seconds.' });
+
+    const kudosButton = new ButtonBuilder()
+      .setCustomId(`thank-kudos:${target.id}:${amount}`)
+      .setLabel('View Kudos')
+      .setStyle(ButtonStyle.Secondary);
+
+    const row = new ActionRowBuilder().addComponents(kudosButton);
 
     const reply = await interaction.reply({
       content: `${interaction.user} thanked ${target}.`,
       embeds: [embed],
+      components: [row],
       allowedMentions: { users: [interaction.user.id, target.id] },
       fetchReply: true,
     });

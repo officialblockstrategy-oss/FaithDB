@@ -113,6 +113,7 @@ The goal is to keep the feature set small, predictable, and easy to maintain.
 - `user` — who to thank
 - `for` — reason for the thanks
 - posts a temporary public confirmation panel that auto-deletes after 30 seconds
+- sends the recipient a private DM telling them they received 10 kudos
 - member-accessible with a cooldown so it is not spammed
 
 ### `/leaderboard`

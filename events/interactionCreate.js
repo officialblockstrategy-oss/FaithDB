@@ -81,6 +81,10 @@ module.exports = {
         return handleCheckBumpStreak(interaction, context);
       }
 
+      if (interaction.isButton() && interaction.customId?.startsWith('thank-kudos:')) {
+        return handleThankKudos(interaction);
+      }
+
       if (interaction.isButton() && interaction.customId?.startsWith('nav-profile:')) {
         return handleProfileNavigation(interaction, context, 'profile');
       }
@@ -213,6 +217,24 @@ async function handleCheckBumpStreak(interaction, context) {
   await interaction.update({
     embeds: [embed],
     components: [buildProfileNavRow(guildId, interaction.user.id, 'streak')],
+  });
+}
+
+async function handleThankKudos(interaction) {
+  const [, targetUserId, amountRaw] = interaction.customId.split(':');
+  const amount = Number(amountRaw) || 10;
+
+  if (interaction.user.id !== targetUserId) {
+    await interaction.reply({
+      content: 'Only the thanked member can use this button.',
+      flags: 64,
+    });
+    return;
+  }
+
+  await interaction.reply({
+    content: `You've received ${amount} Kudos.`,
+    flags: 64,
   });
 }
 
