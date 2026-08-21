@@ -90,7 +90,21 @@ function formatPanelAccessSummary(access) {
   return `Panel access overrides\nUsers: ${users}\nRoles: ${roles}`;
 }
 
-async function handlePanelGrantAccess(interaction, commandAccess, saveCommandAccess) {
+async function persistCommandAccess(saveCommandAccess, syncCommandVisibilityForGuild, guildId) {
+  saveCommandAccess();
+
+  if (typeof syncCommandVisibilityForGuild !== 'function') {
+    return;
+  }
+
+  try {
+    await syncCommandVisibilityForGuild(guildId);
+  } catch (error) {
+    console.error(`Failed to sync command visibility for guild ${guildId}:`, error);
+  }
+}
+
+async function handlePanelGrantAccess(interaction, commandAccess, saveCommandAccess, syncCommandVisibilityForGuild) {
   if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
     await interaction.reply({ content: 'You need Manage Server permission to change panel access grants.', flags: 64 });
     return;
@@ -117,7 +131,7 @@ async function handlePanelGrantAccess(interaction, commandAccess, saveCommandAcc
     if (revoke) {
       access.panel.users = access.panel.users.filter((id) => id !== user.id);
       commandAccess.set(interaction.guildId, access);
-      saveCommandAccess();
+      await persistCommandAccess(saveCommandAccess, syncCommandVisibilityForGuild, interaction.guildId);
       await interaction.reply({ content: hasAccess ? `Removed panel access from <@${user.id}>.` : `<@${user.id}> does not currently have panel access.`, flags: 64 });
       return;
     }
@@ -125,7 +139,7 @@ async function handlePanelGrantAccess(interaction, commandAccess, saveCommandAcc
     if (!hasAccess) {
       access.panel.users.push(user.id);
       commandAccess.set(interaction.guildId, access);
-      saveCommandAccess();
+      await persistCommandAccess(saveCommandAccess, syncCommandVisibilityForGuild, interaction.guildId);
     }
     await interaction.reply({ content: hasAccess ? `<@${user.id}> already has panel access.` : `Granted panel access to <@${user.id}>.`, flags: 64 });
     return;
@@ -135,7 +149,7 @@ async function handlePanelGrantAccess(interaction, commandAccess, saveCommandAcc
   if (revoke) {
     access.panel.roles = access.panel.roles.filter((id) => id !== role.id);
     commandAccess.set(interaction.guildId, access);
-    saveCommandAccess();
+    await persistCommandAccess(saveCommandAccess, syncCommandVisibilityForGuild, interaction.guildId);
     await interaction.reply({ content: hasAccess ? `Removed panel access from <@&${role.id}>.` : `<@&${role.id}> does not currently have panel access.`, flags: 64 });
     return;
   }
@@ -143,7 +157,7 @@ async function handlePanelGrantAccess(interaction, commandAccess, saveCommandAcc
   if (!hasAccess) {
     access.panel.roles.push(role.id);
     commandAccess.set(interaction.guildId, access);
-    saveCommandAccess();
+    await persistCommandAccess(saveCommandAccess, syncCommandVisibilityForGuild, interaction.guildId);
   }
   await interaction.reply({ content: hasAccess ? `<@&${role.id}> already has panel access.` : `Granted panel access to <@&${role.id}>.`, flags: 64 });
 }
@@ -152,7 +166,7 @@ module.exports = {
   data: {
     name: 'panel',
     description: 'Manage reaction role panels',
-    default_member_permissions: null,
+    default_member_permissions: (PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageRoles | PermissionFlagsBits.ManageMessages).toString(),
     dm_permission: false,
     options: [
       {
@@ -372,12 +386,12 @@ module.exports = {
     ],
   },
 
-  async execute(interaction, client, { panels, savePanels, commandAccess, saveCommandAccess }) {
+  async execute(interaction, client, { panels, savePanels, commandAccess, saveCommandAccess, syncCommandVisibilityForGuild }) {
     const group = interaction.options.getSubcommandGroup(false);
     const subcommand = interaction.options.getSubcommand();
 
     if (group === 'grant' && subcommand === 'access') {
-      await handlePanelGrantAccess(interaction, commandAccess, saveCommandAccess);
+      await handlePanelGrantAccess(interaction, commandAccess, saveCommandAccess, syncCommandVisibilityForGuild);
       return;
     }
 

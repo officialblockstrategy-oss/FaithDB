@@ -4,7 +4,16 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-const { Client, Collection, GatewayIntentBits, REST, Routes, Partials } = require('discord.js');
+const {
+  ApplicationCommandPermissionType,
+  Client,
+  Collection,
+  GatewayIntentBits,
+  PermissionFlagsBits,
+  REST,
+  Routes,
+  Partials,
+} = require('discord.js');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
@@ -36,6 +45,13 @@ const quests = new Map();
 const questsFile = path.join(dataDir, 'quests.json');
 const commandAccess = new Map();
 const commandAccessFile = path.join(dataDir, 'command-access.json');
+const commandVisibilityConfig = {
+  panel: { accessKey: 'panel' },
+  panels: { accessKey: 'panel' },
+  rr: { accessKey: 'panel' },
+  sticky: { accessKey: 'sticky' },
+};
+let registeredCommandIds = new Map();
 
 function loadStickies() {
   const loaded = loadMap(
@@ -262,6 +278,30 @@ function saveCommandAccess() {
   saveMap(commandAccessFile, commandAccess);
 }
 
+function normalizeCommandAccessBlock(accessProfile, accessKey) {
+  const block = accessProfile?.[accessKey];
+
+  return {
+    users: Array.isArray(block?.users) ? [...new Set(block.users.filter((id) => typeof id === 'string'))] : [],
+    roles: Array.isArray(block?.roles) ? [...new Set(block.roles.filter((id) => typeof id === 'string'))] : [],
+  };
+}
+
+function buildCommandVisibilityPermissions(accessBlock) {
+  return [
+    ...accessBlock.roles.map((id) => ({
+      id,
+      type: ApplicationCommandPermissionType.Role,
+      permission: true,
+    })),
+    ...accessBlock.users.map((id) => ({
+      id,
+      type: ApplicationCommandPermissionType.User,
+      permission: true,
+    })),
+  ];
+}
+
 // Load command modules from the commands directory and collect command definitions.
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
@@ -283,9 +323,55 @@ loadQuests();
 loadCommandAccess();
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
+
+async function syncCommandVisibilityForGuild(guildId) {
+  if (!guildId || !registeredCommandIds.size) {
+    return;
+  }
+
+  const accessProfile = commandAccess.get(guildId) || {};
+  const body = [];
+
+  for (const [commandName, config] of Object.entries(commandVisibilityConfig)) {
+    const commandId = registeredCommandIds.get(commandName);
+    if (!commandId) {
+      continue;
+    }
+
+    body.push({
+      id: commandId,
+      permissions: buildCommandVisibilityPermissions(
+        normalizeCommandAccessBlock(accessProfile, config.accessKey)
+      ),
+    });
+  }
+
+  if (!body.length) {
+    return;
+  }
+
+  await rest.put(Routes.guildApplicationCommandsPermissions(process.env.CLIENT_ID, guildId), { body });
+}
+
 (async () => {
   try {
-    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
+    const registeredCommands = await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
+    registeredCommandIds = new Map(
+      Array.isArray(registeredCommands)
+        ? registeredCommands
+            .filter((command) => command && typeof command.name === 'string' && typeof command.id === 'string')
+            .map((command) => [command.name, command.id])
+        : []
+    );
+
+    for (const guildId of commandAccess.keys()) {
+      try {
+        await syncCommandVisibilityForGuild(guildId);
+      } catch (error) {
+        console.error(`Failed to sync command visibility for guild ${guildId}:`, error);
+      }
+    }
+
     console.log('Slash commands registered.');
   } catch (error) {
     console.error('Failed to register commands:', error);
@@ -316,6 +402,7 @@ for (const file of eventFiles) {
     saveQuests,
     commandAccess,
     saveCommandAccess,
+    syncCommandVisibilityForGuild,
   };
   if (event.once) {
     client.once(event.name, (...args) => event.execute(...args, client, context));

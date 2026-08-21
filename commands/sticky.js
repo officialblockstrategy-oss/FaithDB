@@ -90,7 +90,21 @@ function formatStickyAccessSummary(access) {
   return `Sticky access overrides\nUsers: ${users}\nRoles: ${roles}`;
 }
 
-async function handleStickyGrantAccess(interaction, commandAccess, saveCommandAccess) {
+async function persistCommandAccess(saveCommandAccess, syncCommandVisibilityForGuild, guildId) {
+  saveCommandAccess();
+
+  if (typeof syncCommandVisibilityForGuild !== 'function') {
+    return;
+  }
+
+  try {
+    await syncCommandVisibilityForGuild(guildId);
+  } catch (error) {
+    console.error(`Failed to sync command visibility for guild ${guildId}:`, error);
+  }
+}
+
+async function handleStickyGrantAccess(interaction, commandAccess, saveCommandAccess, syncCommandVisibilityForGuild) {
   if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
     await interaction.reply({ content: 'You need Manage Server permission to change sticky access grants.', flags: 64 });
     return;
@@ -117,7 +131,7 @@ async function handleStickyGrantAccess(interaction, commandAccess, saveCommandAc
     if (revoke) {
       access.sticky.users = access.sticky.users.filter((id) => id !== user.id);
       commandAccess.set(interaction.guildId, access);
-      saveCommandAccess();
+      await persistCommandAccess(saveCommandAccess, syncCommandVisibilityForGuild, interaction.guildId);
       await interaction.reply({ content: hasAccess ? `Removed sticky access from <@${user.id}>.` : `<@${user.id}> does not currently have sticky access.`, flags: 64 });
       return;
     }
@@ -125,7 +139,7 @@ async function handleStickyGrantAccess(interaction, commandAccess, saveCommandAc
     if (!hasAccess) {
       access.sticky.users.push(user.id);
       commandAccess.set(interaction.guildId, access);
-      saveCommandAccess();
+      await persistCommandAccess(saveCommandAccess, syncCommandVisibilityForGuild, interaction.guildId);
     }
     await interaction.reply({ content: hasAccess ? `<@${user.id}> already has sticky access.` : `Granted sticky access to <@${user.id}>.`, flags: 64 });
     return;
@@ -135,7 +149,7 @@ async function handleStickyGrantAccess(interaction, commandAccess, saveCommandAc
   if (revoke) {
     access.sticky.roles = access.sticky.roles.filter((id) => id !== role.id);
     commandAccess.set(interaction.guildId, access);
-    saveCommandAccess();
+    await persistCommandAccess(saveCommandAccess, syncCommandVisibilityForGuild, interaction.guildId);
     await interaction.reply({ content: hasAccess ? `Removed sticky access from <@&${role.id}>.` : `<@&${role.id}> does not currently have sticky access.`, flags: 64 });
     return;
   }
@@ -143,7 +157,7 @@ async function handleStickyGrantAccess(interaction, commandAccess, saveCommandAc
   if (!hasAccess) {
     access.sticky.roles.push(role.id);
     commandAccess.set(interaction.guildId, access);
-    saveCommandAccess();
+    await persistCommandAccess(saveCommandAccess, syncCommandVisibilityForGuild, interaction.guildId);
   }
   await interaction.reply({ content: hasAccess ? `<@&${role.id}> already has sticky access.` : `Granted sticky access to <@&${role.id}>.`, flags: 64 });
 }
@@ -152,7 +166,7 @@ module.exports = {
   data: {
     name: 'sticky',
     description: 'Manage sticky messages for this channel',
-    default_member_permissions: null,
+    default_member_permissions: (PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageMessages).toString(),
     dm_permission: false,
     options: [
       {
@@ -393,12 +407,12 @@ module.exports = {
     ],
   },
 
-  async execute(interaction, client, { stickies, saveStickies, commandAccess, saveCommandAccess }) {
+  async execute(interaction, client, { stickies, saveStickies, commandAccess, saveCommandAccess, syncCommandVisibilityForGuild }) {
     const group = interaction.options.getSubcommandGroup(false);
     const subcommand = interaction.options.getSubcommand();
 
     if (group === 'grant' && subcommand === 'access') {
-      await handleStickyGrantAccess(interaction, commandAccess, saveCommandAccess);
+      await handleStickyGrantAccess(interaction, commandAccess, saveCommandAccess, syncCommandVisibilityForGuild);
       return;
     }
 

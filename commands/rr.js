@@ -7,7 +7,7 @@ module.exports = {
   data: {
     name: 'rr',
     description: 'Manage reaction roles',
-    default_member_permissions: null,
+    default_member_permissions: (PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageRoles | PermissionFlagsBits.ManageMessages).toString(),
     dm_permission: false,
     options: [
       {
