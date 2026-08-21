@@ -4,6 +4,24 @@ function formatKudosDisplay(value) {
   return Math.round(Number(value || 0));
 }
 
+async function resolveLeaderboardName(interaction, userId) {
+  let member = interaction.guild.members.cache.get(userId) || null;
+  if (!member) {
+    member = await interaction.guild.members.fetch(userId).catch(() => null);
+  }
+
+  if (member) {
+    return member.displayName || member.user?.username || userId;
+  }
+
+  const user = await interaction.client.users.fetch(userId).catch(() => null);
+  if (user) {
+    return user.globalName || user.username || userId;
+  }
+
+  return `Unknown User (${userId})`;
+}
+
 module.exports = {
   data: {
     name: 'leaderboard',
@@ -51,24 +69,19 @@ module.exports = {
 
     for (let index = 0; index < entries.length; index += 1) {
       const entry = entries[index];
-      let member = interaction.guild.members.cache.get(entry.userId) || null;
-      if (!member) {
-        member = await interaction.guild.members.fetch(entry.userId).catch(() => null);
-      }
-
-      const mention = member ? `<@${member.id}>` : `<@${entry.userId}>`;
-      leaderboardRows.push(`${index + 1}. ${mention} — ${formatKudosDisplay(entry.total)}`);
+      const name = await resolveLeaderboardName(interaction, entry.userId);
+      leaderboardRows.push(`${index + 1}. ${name} — ${formatKudosDisplay(entry.total)}`);
     }
 
     const userRankIndex = allEntries.findIndex((entry) => entry.userId === interaction.user.id);
     const userTotal = guildMap.get(interaction.user.id)?.total || 0;
     const userRankText = userRankIndex >= 0 ? `#${userRankIndex + 1}` : 'N/A';
-    const currentUserMention = `<@${interaction.user.id}>`;
+    const currentUserName = interaction.member?.displayName || interaction.user.globalName || interaction.user.username;
 
     embed.setDescription(
       leaderboardRows.join('\n') +
       '\n\n---\n' +
-      `User: ${currentUserMention} \nRank: ${userRankText}  \nKudos: ${formatKudosDisplay(userTotal)}`
+      `User: ${currentUserName} \nRank: ${userRankText}  \nKudos: ${formatKudosDisplay(userTotal)}`
     );
 
     await interaction.reply({ embeds: [embed], flags: 64 });
