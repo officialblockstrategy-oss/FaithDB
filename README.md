@@ -109,9 +109,10 @@ The goal is to keep the feature set small, predictable, and easy to maintain.
 - `warn <hours-left> <text>` — send a DM warning when the purge is close
 - `disable` — disable the purge for the server
 
-### `/kudos to`
-- `user` — who to award kudos to
-- `for` — reason for the award
+### `/thank`
+- `user` — who to thank
+- `for` — reason for the thanks
+- posts a temporary public confirmation panel that auto-deletes after 30 seconds
 - member-accessible with a cooldown so it is not spammed
 
 ### `/leaderboard`

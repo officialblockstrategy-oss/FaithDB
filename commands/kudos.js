@@ -1,31 +1,34 @@
-const { ApplicationCommandOptionType } = require('discord.js');
+const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
 const { buildQuestEngine } = require('../services/questEngine');
 const { addKudosEntry, getGuildKudos } = require('../services/kudosService');
 
+function scheduleDeletion(message, delayMs = 30000) {
+  if (!message || typeof message.delete !== 'function') {
+    return;
+  }
+
+  setTimeout(() => {
+    message.delete().catch(() => {});
+  }, delayMs);
+}
+
 module.exports = {
   data: {
-    name: 'kudos',
-    description: 'Award kudos to a member for something they did',
+    name: 'thank',
+    description: 'Thank a member for something they did',
     dm_permission: false,
     options: [
       {
-        name: 'to',
-        description: 'Give kudos to a member',
-        type: ApplicationCommandOptionType.Subcommand,
-        options: [
-          {
-            name: 'user',
-            description: 'Member to give kudos to',
-            type: ApplicationCommandOptionType.User,
-            required: true,
-          },
-          {
-            name: 'for',
-            description: 'Why they earned the kudos',
-            type: ApplicationCommandOptionType.String,
-            required: true,
-          },
-        ],
+        name: 'user',
+        description: 'Member to thank',
+        type: ApplicationCommandOptionType.User,
+        required: true,
+      },
+      {
+        name: 'for',
+        description: 'What you are thanking them for',
+        type: ApplicationCommandOptionType.String,
+        required: true,
       },
     ],
   },
@@ -33,12 +36,6 @@ module.exports = {
   async execute(interaction, client, { kudos, saveKudos, quests, saveQuests }) {
     if (!interaction.inGuild()) {
       await interaction.reply({ content: 'This command must be used in a server.', flags: 64 });
-      return;
-    }
-
-    const sub = interaction.options.getSubcommand();
-    if (sub !== 'to') {
-      await interaction.reply({ content: 'Unknown kudos command.', flags: 64 });
       return;
     }
 
@@ -90,6 +87,20 @@ module.exports = {
     quests.set(interaction.guildId, questEngine.state);
     saveQuests();
 
-    await interaction.reply({ content: `${target.tag} earned ${amount} Kudos for: ${reason}`, flags: 64 });
+    const embed = new EmbedBuilder()
+      .setColor(0xEB583B)
+      .setTitle('Thanks Sent')
+      .setDescription(`${interaction.user} has thanked ${target} for ${reason}`)
+      .addFields({ name: 'Kudos Awarded', value: `${amount}`, inline: true })
+      .setFooter({ text: 'This message will disappear in 30 seconds.' });
+
+    const reply = await interaction.reply({
+      content: `${interaction.user} thanked ${target}.`,
+      embeds: [embed],
+      allowedMentions: { users: [interaction.user.id, target.id] },
+      fetchReply: true,
+    });
+
+    scheduleDeletion(reply);
   },
 };
