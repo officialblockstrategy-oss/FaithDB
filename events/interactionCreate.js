@@ -1,73 +1,6 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { addKudosEntry, getGuildKudos } = require('../services/kudosService');
-
-function getBumpStats(guildMap, userId) {
-  const record = getGuildKudos(guildMap, userId);
-  const history = Array.isArray(record?.bump?.history) ? record.bump.history : [];
-  const uniqueDays = [...new Set(history.map((timestamp) => new Date(Number(timestamp)).toISOString().slice(0, 10)))];
-
-  let streak = 0;
-  const today = new Date();
-  const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-  while (true) {
-    const iso = cursor.toISOString().slice(0, 10);
-    if (uniqueDays.includes(iso)) {
-      streak += 1;
-      cursor.setDate(cursor.getDate() - 1);
-      continue;
-    }
-    break;
-  }
-
-  const perDayCounts = history.reduce((map, timestamp) => {
-    const iso = new Date(Number(timestamp)).toISOString().slice(0, 10);
-    map[iso] = (map[iso] || 0) + 1;
-    return map;
-  }, {});
-
-  const bestDayCount = Object.values(perDayCounts).reduce((max, count) => Math.max(max, count), 0);
-
-  return {
-    streak,
-    bestDayCount,
-    totalBumps: history.length,
-  };
-}
-
-function buildProfileNavRow(guildId, userId, current = 'profile') {
-  const leftDisabled = current === 'profile';
-  const rightDisabled = current === 'streak';
-
-  const leftButton = new ButtonBuilder()
-    .setCustomId(`nav-profile:${guildId}:${userId}`)
-    .setEmoji('⬅️')
-    .setStyle(ButtonStyle.Secondary)
-    .setDisabled(leftDisabled);
-
-  const rightButton = new ButtonBuilder()
-    .setCustomId(`nav-streak:${guildId}:${userId}`)
-    .setEmoji('➡️')
-    .setStyle(ButtonStyle.Secondary)
-    .setDisabled(rightDisabled);
-
-  return new ActionRowBuilder().addComponents(leftButton, rightButton);
-}
-
-function buildStreakEmbed(guildMap, userId) {
-  const stats = getBumpStats(guildMap, userId);
-
-  return new EmbedBuilder()
-    .setTitle('Bump Streak')
-    .setColor(0xEB583B)
-    .setDescription([
-      '```text',
-      `Current Streak: ${stats.streak} day${stats.streak === 1 ? '' : 's'}`,
-      `Best Day: ${stats.bestDayCount} bumps`,
-      `Total Bumps: ${stats.totalBumps}`,
-      '```',
-    ].join('\n'));
-}
+const { buildProfileNavRow, buildStreakEmbed } = require('../commands/profile');
 
 module.exports = {
   name: 'interactionCreate',
@@ -235,27 +168,8 @@ async function handleProfileNavigation(interaction, context, target) {
   const displayName = member?.displayName || member?.user?.username || 'Member';
 
   if (target === 'profile') {
-    const metrics = require('../services/kudosService').getProfileMetrics(guildMap, userId);
-    const allEntries = [...guildMap.entries()]
-      .map(([memberId, data]) => ({ userId: memberId, total: Number(data?.total || 0) }))
-      .filter((entry) => entry.total > 0)
-      .sort((a, b) => b.total - a.total);
-
-    const rankIndex = allEntries.findIndex((entry) => entry.userId === userId);
-    const rankText = rankIndex >= 0 ? `#${rankIndex + 1}` : 'Unranked';
-
-    const embed = new EmbedBuilder()
-      .setTitle(`${displayName}'s Profile`)
-      .setColor(0xEB583B)
-      .setDescription([
-        '```text',
-        `Server Rank: ${rankText}`,
-        `Total Kudos: ${Math.round(Number(metrics.total || 0))}`,
-        `Thanks Given: ${metrics.thanksGiven}`,
-        `Yap Timer: ${metrics.activityText}`,
-        `Thanks Received: ${metrics.thanksReceived}`,
-        '```',
-      ].join('\n'));
+    const { buildProfileEmbed } = require('../commands/profile');
+    const embed = buildProfileEmbed(guildMap, userId, displayName);
 
     await interaction.update({
       embeds: [embed],
