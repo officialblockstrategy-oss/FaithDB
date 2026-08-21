@@ -61,9 +61,9 @@ module.exports = {
         '```text',
         `Server Rank: ${rankText}`,
         `Total Kudos: ${formatKudosDisplay(metrics.total)}`,
-        `Kudos "To": ${metrics.manualReceived}`,
         `Yap Timer: ${metrics.activityText}`,
-        `Times Thanked: ${metrics.thankedCount}`,
+        `Thanks Given: ${metrics.thanksGiven}`,
+        `Thanks Received: ${metrics.thanksReceived}`,
         '```',
       ].join('\n'));
 

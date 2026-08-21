@@ -1,20 +1,13 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { render } = require('../utils/tpl');
-const { buildQuestEngine } = require('../services/questEngine');
 const {
   addKudosEntry,
   calculateConversationKudos,
-  canReplyAward,
   getGuildKudos,
 } = require('../services/kudosService');
 
 const refreshing = new Set();
 const conversationSessions = new Map();
-
-function isThankYouMessage(content) {
-  const text = (content || '').toLowerCase().replace(/<@!?(\d+)>/g, '').trim();
-  return /(thanks|thank you|much appreciated|thx|ty|appreciate it|appreciated)/.test(text) && !/(no thanks|not thanks|won't thank)/.test(text);
-}
 
 function matchesBumpCommand(content) {
   return /(^|\s)(!d\s*bump|!bump|\bbum[p]?(\s|$))/i.test(content || '');
@@ -114,7 +107,7 @@ const processedBumpMessages = new Set();
 
 module.exports = {
   name: 'messageCreate',
-  async execute(message, client, { stickies, saveStickies, verify, followups, bumpDetection, saveBumpDetection, kudos, saveKudos, quests, saveQuests }) {
+  async execute(message, client, { stickies, saveStickies, verify, followups, bumpDetection, saveBumpDetection, kudos, saveKudos }) {
     if (!message.guild) return;
 
     const config = getConfiguredBumpDetection(message.guild.id, bumpDetection);
@@ -126,8 +119,6 @@ module.exports = {
 
     const guildMap = kudos.get(message.guild.id) || new Map();
     const now = Date.now();
-    const guildQuestState = quests.get(message.guild.id) || { catalog: new Map(), memberProgress: new Map() };
-    const questEngine = buildQuestEngine(guildQuestState);
 
     if (isConfiguredBumpSource && isValidConfiguredBump(message, config)) {
       if (processedBumpMessages.has(message.id)) {
@@ -169,44 +160,6 @@ module.exports = {
     if (talkReward > 0) {
       kudos.set(message.guild.id, guildMap);
       saveKudos();
-    }
-
-    if (message.content) {
-      questEngine.recordMessage({
-        userId: message.author.id,
-        channelId: message.channel.id,
-        otherUserId: message.mentions?.users?.first()?.id || null,
-        content: message.content,
-        now,
-      });
-      questEngine.recordDailyActivity({ userId: message.author.id, day: new Date(now).toISOString().slice(0, 10), now });
-      quests.set(message.guild.id, questEngine.state);
-      saveQuests();
-    }
-
-    if (message.reference && message.content && isThankYouMessage(message.content)) {
-      const targetMessage = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
-      const targetUser = targetMessage?.author;
-      if (targetUser && targetUser.id !== message.author.id && canReplyAward(guildMap, message.author.id, targetUser.id, now)) {
-        const reward = Math.min(14, 4 + (message.content.split(/\s+/).length > 10 ? 4 : 2));
-        addKudosEntry(guildMap, targetUser.id, reward, 'gratitude', `Thanked by ${message.author.id}`, now);
-        const giver = getGuildKudos(guildMap, message.author.id);
-        giver.gratitude = {
-          ...(giver.gratitude || {}),
-          lastAwardAt: now,
-          pairs: { ...(giver.gratitude?.pairs || {}), [targetUser.id]: now },
-          recent: [...(giver.gratitude?.recent || []), now].slice(-10),
-        };
-        guildMap.set(message.author.id, giver);
-        const targetProfile = getGuildKudos(guildMap, targetUser.id);
-        targetProfile.gratitude = { ...(targetProfile.gratitude || {}), count: (targetProfile.gratitude?.count || 0) + 1 };
-        guildMap.set(targetUser.id, targetProfile);
-        kudos.set(message.guild.id, guildMap);
-        saveKudos();
-
-        // Gratitude responses are tracked as social feedback, but they do not satisfy the
-        // explicit kudos achievements. Only the manual kudos command should advance those quests.
-      }
     }
 
     // Verification and clean-channel handling takes precedence over sticky refresh.

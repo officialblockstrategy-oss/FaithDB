@@ -93,17 +93,6 @@ module.exports = {
         return handleProfileNavigation(interaction, context, 'streak');
       }
 
-      if (
-        interaction.isButton() &&
-        (interaction.customId?.startsWith('quests-nav-left:') || interaction.customId?.startsWith('quests-nav-right:'))
-      ) {
-        return handleQuestNavigation(interaction, context);
-      }
-
-      if (interaction.isButton() && interaction.customId?.startsWith('quests-toggle:')) {
-        return handleQuestToggle(interaction, context);
-      }
-
       // Handle select menu interactions for reaction role panels first.
       if (interaction.isStringSelectMenu()) {
         return handleReactionRoleSelect(interaction, context);
@@ -262,9 +251,9 @@ async function handleProfileNavigation(interaction, context, target) {
         '```text',
         `Server Rank: ${rankText}`,
         `Total Kudos: ${Math.round(Number(metrics.total || 0))}`,
-        `Kudos "To": ${metrics.manualReceived}`,
+        `Thanks Given: ${metrics.thanksGiven}`,
         `Yap Timer: ${metrics.activityText}`,
-        `Times Thanked: ${metrics.thankedCount}`,
+        `Thanks Received: ${metrics.thanksReceived}`,
         '```',
       ].join('\n'));
 
@@ -282,45 +271,6 @@ async function handleProfileNavigation(interaction, context, target) {
   });
 }
 
-async function handleQuestNavigation(interaction, context) {
-  const [action, guildId, userId, mode, pageRaw] = interaction.customId.split(':');
-  const page = Number(pageRaw) || 0;
-  const guildState = context.quests?.get(guildId) || { catalog: new Map(), memberProgress: new Map() };
-  const { getQuestSummary } = require('../services/questsService');
-  const summary = getQuestSummary(guildState, userId);
-  const entries = mode === 'finished' ? [...summary.completed] : [...summary.incomplete];
-  const totalPages = Math.max(1, Math.ceil(entries.length / 5));
-  const safePage = Math.min(Math.max(page, 0), Math.max(0, totalPages - 1));
-  const member = interaction.guild?.members.cache.get(userId) || null;
-  const name = member?.displayName || userId;
-
-  const { buildQuestEmbed, buildQuestRow } = require('../commands/quests');
-  const embed = buildQuestEmbed(name, mode, safePage, entries);
-  const row = buildQuestRow(guildId, userId, mode, safePage, totalPages);
-
-  await interaction.update({ embeds: [embed], components: [row] });
-}
-
-async function handleQuestToggle(interaction, context) {
-  const [, guildId, userId, mode, pageRaw] = interaction.customId.split(':');
-  const page = Number(pageRaw) || 0;
-  const nextMode = mode === 'finished' ? 'unfinished' : 'finished';
-  const guildState = context.quests?.get(guildId) || { catalog: new Map(), memberProgress: new Map() };
-  const { getQuestSummary } = require('../services/questsService');
-  const summary = getQuestSummary(guildState, userId);
-  const entries = nextMode === 'finished' ? [...summary.completed] : [...summary.incomplete];
-  const totalPages = Math.max(1, Math.ceil(entries.length / 5));
-  const safePage = Math.min(Math.max(page, 0), Math.max(0, totalPages - 1));
-  const member = interaction.guild?.members.cache.get(userId) || null;
-  const name = member?.displayName || userId;
-
-  const { buildQuestEmbed, buildQuestRow } = require('../commands/quests');
-  const embed = buildQuestEmbed(name, nextMode, safePage, entries);
-  const row = buildQuestRow(guildId, userId, nextMode, safePage, totalPages);
-
-  await interaction.update({ embeds: [embed], components: [row] });
-}
-
 async function handleReactionRoleSelect(interaction, context) {
   const { panels } = context;
   const panelId = interaction.message.id;
@@ -336,18 +286,10 @@ async function handleReactionRoleSelect(interaction, context) {
   const toRemove = currentRoleIds.filter((id) => !selectedRoleIds.includes(id) && member.roles.cache.has(id));
 
   const results = [];
-  const { buildQuestEngine } = require('../services/questEngine');
-  const guildQuestState = context.quests?.get(interaction.guildId) || { catalog: new Map(), memberProgress: new Map() };
-  const questEngine = buildQuestEngine(guildQuestState);
   for (const roleId of toAdd) {
     try {
       await member.roles.add(roleId);
       results.push(`Added <@&${roleId}>`);
-      questEngine.recordRole({ userId: member.id, roleId, now: Date.now() });
-      if (context.quests) {
-        context.quests.set(interaction.guildId, questEngine.state);
-        context.saveQuests?.();
-      }
     } catch (error) {
       console.warn('Failed to add reaction role:', error);
     }

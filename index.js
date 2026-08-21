@@ -41,8 +41,6 @@ const bumpDetection = new Map();
 const bumpDetectionFile = path.join(dataDir, 'bump-detect.json');
 const kudos = new Map();
 const kudosFile = path.join(dataDir, 'kudos.json');
-const quests = new Map();
-const questsFile = path.join(dataDir, 'quests.json');
 const commandAccess = new Map();
 const commandAccessFile = path.join(dataDir, 'command-access.json');
 const commandVisibilityConfig = {
@@ -188,76 +186,6 @@ function saveKudos() {
   saveJson(kudosFile, data);
 }
 
-function loadQuests() {
-  const raw = loadJson(questsFile, {});
-  for (const [guildId, state] of Object.entries(raw || {})) {
-    const catalog = new Map();
-    const memberProgress = new Map();
-
-    const guildCatalog = state && typeof state === 'object' && state.catalog && typeof state.catalog === 'object' ? state.catalog : {};
-    for (const [questId, quest] of Object.entries(guildCatalog)) {
-      if (quest && typeof quest === 'object') {
-        catalog.set(questId, {
-          id: quest.id || questId,
-          title: typeof quest.title === 'string' ? quest.title : questId,
-          description: typeof quest.description === 'string' ? quest.description : '',
-          enabled: quest.enabled !== false,
-          createdAt: Number(quest.createdAt) || Date.now(),
-          ...quest,
-        });
-      }
-    }
-
-    const guildProgress = state && typeof state === 'object' && state.memberProgress && typeof state.memberProgress === 'object' ? state.memberProgress : {};
-    for (const [userId, recordSet] of Object.entries(guildProgress)) {
-      if (recordSet && typeof recordSet === 'object') {
-        const userEntries = new Map();
-        for (const [questId, record] of Object.entries(recordSet)) {
-          if (record && typeof record === 'object') {
-            userEntries.set(questId, {
-              questId: record.questId || questId,
-              completed: Boolean(record.completed),
-              progress: Number(record.progress) || 0,
-              completedAt: Number(record.completedAt) || null,
-              updatedAt: Number(record.updatedAt) || Date.now(),
-              ...record,
-            });
-          }
-        }
-        if (userEntries.size) {
-          memberProgress.set(userId, userEntries);
-        }
-      }
-    }
-
-    if (catalog.size || memberProgress.size) {
-      quests.set(guildId, { catalog, memberProgress });
-    }
-  }
-
-  const totalQuestDefinitions = [...quests.values()].reduce((sum, guildState) => sum + guildState.catalog.size, 0);
-  const totalQuestProgress = [...quests.values()].reduce((sum, guildState) => sum + [...guildState.memberProgress.values()].reduce((count, entries) => count + entries.size, 0), 0);
-  console.log(`Loaded ${totalQuestDefinitions} quest definition(s) and ${totalQuestProgress} quest progress record(s) from disk.`);
-}
-
-function saveQuests() {
-  const data = Object.fromEntries(
-    [...quests.entries()].map(([guildId, guildState]) => [
-      guildId,
-      {
-        catalog: Object.fromEntries(guildState.catalog || new Map()),
-        memberProgress: Object.fromEntries(
-          [...(guildState.memberProgress || new Map()).entries()].map(([userId, recordSet]) => [
-            userId,
-            Object.fromEntries(recordSet),
-          ])
-        ),
-      },
-    ])
-  );
-  saveJson(questsFile, data);
-}
-
 function loadCommandAccess() {
   const loaded = loadMap(commandAccessFile, (cfg) => cfg && typeof cfg === 'object');
   for (const [guildId, cfg] of loaded) {
@@ -319,7 +247,6 @@ loadFollowups();
 loadVerify();
 loadBumpDetection();
 loadKudos();
-loadQuests();
 loadCommandAccess();
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
@@ -398,8 +325,6 @@ for (const file of eventFiles) {
     saveBumpDetection,
     kudos,
     saveKudos,
-    quests,
-    saveQuests,
     commandAccess,
     saveCommandAccess,
     syncCommandVisibilityForGuild,

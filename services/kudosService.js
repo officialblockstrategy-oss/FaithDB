@@ -69,34 +69,30 @@ function getProfileMetrics(guildMap, userId) {
   const record = getGuildKudos(guildMap, userId);
   const history = Array.isArray(record.history) ? record.history : [];
   const total = Number(record.total || 0);
-  const manualReceived = history.filter((entry) => entry && entry.source === 'manual').length;
-  const thankedCount = history.filter((entry) => entry && entry.source === 'gratitude').length;
+  const thanksReceived = history.filter((entry) => entry && entry.source === 'manual').length;
+  const thanksGiven = [...(guildMap?.values?.() || [])]
+    .flatMap((memberRecord) => (Array.isArray(memberRecord?.history) ? memberRecord.history : []))
+    .filter(
+      (entry) =>
+        entry &&
+        entry.source === 'manual' &&
+        typeof entry.reason === 'string' &&
+        entry.reason.startsWith(`Awarded by ${userId}:`)
+    ).length;
   const bumpCount = history.filter((entry) => entry && entry.source === 'bump').length;
   const activityMs = Number(record.activity?.totalMs || 0);
 
   return {
     total,
-    manualReceived,
-    thankedCount,
+    thanksGiven,
+    thanksReceived,
+    // Backwards-compatible aliases for existing callers.
+    manualReceived: thanksGiven,
+    thankedCount: thanksReceived,
     bumpCount,
     activityMs,
     activityText: formatDuration(activityMs),
   };
-}
-
-function canReplyAward(guildMap, giverId, targetId, now = Date.now()) {
-  if (!guildMap || giverId === targetId) return false;
-
-  const giver = getGuildKudos(guildMap, giverId);
-  const gratitude = giver.gratitude || {};
-  const recent = Array.isArray(gratitude.recent) ? gratitude.recent : [];
-  const pair = gratitude.pairs && gratitude.pairs[targetId] ? gratitude.pairs[targetId] : null;
-
-  if (pair && now - pair < 60 * 60 * 1000) return false;
-  if (recent.filter((time) => now - time < 60 * 60 * 1000).length >= 3) return false;
-  if (gratitude.lastAwardAt && now - gratitude.lastAwardAt < 90 * 1000) return false;
-
-  return true;
 }
 
 module.exports = {
@@ -106,7 +102,6 @@ module.exports = {
   estimateReplyKudos,
   getKudosStats,
   getProfileMetrics,
-  canReplyAward,
   clamp,
   formatDuration,
 };

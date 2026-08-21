@@ -10,7 +10,6 @@ This bot is intentionally minimal and opinionated. The current active runtime is
 - sticky messages
 - reaction-role panels
 - member kudos tracking and profiles
-- quest tracking infrastructure with paged finished/unfinished panels
 - configurable bump detection and claim rewards
 
 The goal is to keep the feature set small, predictable, and easy to maintain.
@@ -23,11 +22,8 @@ The goal is to keep the feature set small, predictable, and easy to maintain.
 - Welcome greetings with configurable text and channel
 - Sticky messages that refresh automatically in a channel
 - Reaction role panels for role selection
-- Quest tracking infrastructure with separate finished and unfinished views
-- Paginated quest panels with a toggle between the two modes
 - Kudos rewards for:
   - active server engagement / chat time
-  - direct gratitude / thank-you replies
   - server bumps
   - manual kudos awards
 - Member profile command showing total kudos, rank, yapping time, bumps, and thank-you counts
@@ -55,7 +51,6 @@ The goal is to keep the feature set small, predictable, and easy to maintain.
 - `commands/`: slash command modules for the active bot features
 - `events/`: message, interaction, join, and delete handlers
 - `services/kudosService.js`: reward logic, ranking math, and anti-farming checks
-- `services/questsService.js`: quest state helpers and progress summaries
 - `utils/storage.js`: JSON disk helpers
 - `utils/tpl.js`: template rendering for verification follow-ups and greeting text
 
@@ -113,18 +108,12 @@ The goal is to keep the feature set small, predictable, and easy to maintain.
 - `user` — who to thank
 - `for` — reason for the thanks
 - posts a temporary public confirmation panel that auto-deletes after 30 seconds
-- sends the recipient a private DM telling them they received 10 kudos
+- includes a button so only the thanked member can view a private kudos confirmation
 - member-accessible with a cooldown so it is not spammed
 
 ### `/leaderboard`
 - show the top kudos totals in the server
 - includes the calling member’s rank and total beneath the top 10
-
-### `/quests`
-- opens the finished quests panel by default
-- supports paging with left/right arrows
-- toggles between finished and unfinished quests with the middle button
-- currently acts as the quest UI infrastructure layer while quest definitions are added
 
 ### `/profile`
 - view total kudos
@@ -144,7 +133,6 @@ The kudos system is intentionally conservative and low-abuse.
 Rewards are based on:
 
 - active engagement time in conversation
-- direct thank-you / much appreciated responses
 - server bumps
 - limited manual member awards
 - optional configured bump-claim rewards via the bump detection flow
@@ -152,20 +140,8 @@ Rewards are based on:
 The current logic includes anti-farming protections such as:
 
 - limiting how often manual kudos can be given
-- limiting repeated thank-you chains
 - requiring spaced-out bump award windows
 - only counting meaningful activity and reply events
-
-## Quest System
-
-The quest system is intentionally light and extensible. It supports:
-
-- a per-guild quest catalog
-- per-user quest progress tracking
-- finished vs unfinished quest grouping
-- paginated quest panels with a switch button between the two views
-
-The current implementation provides the infrastructure layer; actual quest definitions are not yet populated.
 
 ## Data Storage
 
@@ -181,5 +157,4 @@ This directory is intentionally local runtime state and is not committed to Git.
 - `followups.json` — saved follow-ups per guild
 - `verify.json` — verification settings and clean-channel config
 - `kudos.json` — member kudos totals and related metrics
-- `quests.json` — quest definitions and per-user progress tracking
 - `command-access.json` — per-guild user/role allowlists for panel/sticky access

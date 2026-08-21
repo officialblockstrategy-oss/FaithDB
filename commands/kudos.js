@@ -1,5 +1,4 @@
 const { ActionRowBuilder, ApplicationCommandOptionType, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
-const { buildQuestEngine } = require('../services/questEngine');
 const { addKudosEntry, getGuildKudos } = require('../services/kudosService');
 
 function scheduleDeletion(message, delayMs = 30000) {
@@ -33,7 +32,7 @@ module.exports = {
     ],
   },
 
-  async execute(interaction, client, { kudos, saveKudos, quests, saveQuests }) {
+  async execute(interaction, client, { kudos, saveKudos }) {
     if (!interaction.inGuild()) {
       await interaction.reply({ content: 'This command must be used in a server.', flags: 64 });
       return;
@@ -80,12 +79,6 @@ module.exports = {
 
     kudos.set(interaction.guildId, guildMap);
     saveKudos();
-
-    const guildQuestState = quests.get(interaction.guildId) || { catalog: new Map(), memberProgress: new Map() };
-    const questEngine = buildQuestEngine(guildQuestState);
-    questEngine.recordKudos({ giverId: interaction.user.id, targetId: target.id, source: 'manual', now });
-    quests.set(interaction.guildId, questEngine.state);
-    saveQuests();
 
     const embed = new EmbedBuilder()
       .setColor(0xEB583B)
