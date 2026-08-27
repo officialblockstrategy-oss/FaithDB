@@ -341,7 +341,15 @@ async function syncCommandVisibilityForAllGuilds() {
     return;
   }
 
-  for (const guildId of client.guilds.cache.keys()) {
+  const guildIds = new Set(client.guilds.cache.keys());
+  const fetchedGuilds = await client.guilds.fetch().catch(() => null);
+  if (fetchedGuilds?.size) {
+    for (const [guildId] of fetchedGuilds) {
+      guildIds.add(guildId);
+    }
+  }
+
+  for (const guildId of guildIds) {
     try {
       await syncCommandVisibilityForGuild(guildId);
     } catch (error) {
@@ -361,11 +369,15 @@ async function syncCommandVisibilityForAllGuilds() {
         : []
     );
 
-    for (const guildId of commandAccess.keys()) {
-      try {
-        await syncCommandVisibilityForGuild(guildId);
-      } catch (error) {
-        console.error(`Failed to sync command visibility for guild ${guildId}:`, error);
+    if (client.isReady()) {
+      await syncCommandVisibilityForAllGuilds();
+    } else {
+      for (const guildId of commandAccess.keys()) {
+        try {
+          await syncCommandVisibilityForGuild(guildId);
+        } catch (error) {
+          console.error(`Failed to sync command visibility for guild ${guildId}:`, error);
+        }
       }
     }
 
