@@ -56,6 +56,17 @@ module.exports = {
         }
       }
 
+      if (interaction.isModalSubmit() && interaction.customId?.startsWith('greeting-edit:')) {
+        const greetingCommand = client.commands.get('greeting');
+        if (greetingCommand?.handleModalSubmit) {
+          return greetingCommand.handleModalSubmit(
+            interaction,
+            context.greetings,
+            context.saveGreetings
+          );
+        }
+      }
+
       const commandName = interaction.commandName || interaction.command?.name;
       if (!commandName) {
         return;

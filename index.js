@@ -84,9 +84,36 @@ function loadGreetings() {
   const loaded = loadMap(greetingsFile, (cfg) => Array.isArray(cfg) || (cfg && Array.isArray(cfg.msgs)));
   for (const [guildId, cfg] of loaded) {
     if (Array.isArray(cfg)) {
-      greetings.set(guildId, { msgs: cfg, channelId: null });
+      greetings.set(guildId, {
+        msgs: cfg.filter((msg) => typeof msg === 'string').map((text) => ({ text, embed: false })),
+        channelId: null,
+        deleteAfterSeconds: null,
+      });
     } else {
-      greetings.set(guildId, { msgs: cfg.msgs || [], channelId: cfg.channelId || null });
+      const msgs = (Array.isArray(cfg.msgs) ? cfg.msgs : [])
+        .map((entry) => {
+          if (typeof entry === 'string') {
+            return { text: entry, embed: false };
+          }
+
+          if (!entry || typeof entry !== 'object' || typeof entry.text !== 'string') {
+            return null;
+          }
+
+          return {
+            text: entry.text,
+            embed: Boolean(entry.embed),
+          };
+        })
+        .filter(Boolean);
+
+      greetings.set(guildId, {
+        msgs,
+        channelId: cfg.channelId || null,
+        deleteAfterSeconds: Number.isInteger(cfg.deleteAfterSeconds) && cfg.deleteAfterSeconds > 0
+          ? cfg.deleteAfterSeconds
+          : null,
+      });
     }
   }
   console.log(`Loaded ${greetings.size} greeting profile(s) from disk.`);
@@ -96,7 +123,30 @@ function saveGreetings() {
   const data = Object.fromEntries(
     [...greetings.entries()].map(([guildId, cfg]) => [
       guildId,
-      { msgs: Array.isArray(cfg?.msgs) ? cfg.msgs : [], channelId: cfg?.channelId || null },
+      {
+        msgs: Array.isArray(cfg?.msgs)
+          ? cfg.msgs
+              .map((entry) => {
+                if (typeof entry === 'string') {
+                  return { text: entry, embed: false };
+                }
+
+                if (!entry || typeof entry !== 'object' || typeof entry.text !== 'string') {
+                  return null;
+                }
+
+                return {
+                  text: entry.text,
+                  embed: Boolean(entry.embed),
+                };
+              })
+              .filter(Boolean)
+          : [],
+        channelId: cfg?.channelId || null,
+        deleteAfterSeconds: Number.isInteger(cfg?.deleteAfterSeconds) && cfg.deleteAfterSeconds > 0
+          ? cfg.deleteAfterSeconds
+          : null,
+      },
     ])
   );
   saveJson(greetingsFile, data);
@@ -215,8 +265,13 @@ function normalizeCommandAccessBlock(accessProfile, accessKey) {
   };
 }
 
-function buildCommandVisibilityPermissions(accessBlock) {
+function buildCommandVisibilityPermissions(guildId, accessBlock) {
   return [
+    {
+      id: guildId,
+      type: ApplicationCommandPermissionType.Role,
+      permission: false,
+    },
     ...accessBlock.roles.map((id) => ({
       id,
       type: ApplicationCommandPermissionType.Role,
@@ -268,6 +323,7 @@ async function syncCommandVisibilityForGuild(guildId) {
     body.push({
       id: commandId,
       permissions: buildCommandVisibilityPermissions(
+        guildId,
         normalizeCommandAccessBlock(accessProfile, config.accessKey)
       ),
     });
@@ -278,6 +334,20 @@ async function syncCommandVisibilityForGuild(guildId) {
   }
 
   await rest.put(Routes.guildApplicationCommandsPermissions(process.env.CLIENT_ID, guildId), { body });
+}
+
+async function syncCommandVisibilityForAllGuilds() {
+  if (!registeredCommandIds.size) {
+    return;
+  }
+
+  for (const guildId of client.guilds.cache.keys()) {
+    try {
+      await syncCommandVisibilityForGuild(guildId);
+    } catch (error) {
+      console.error(`Failed to sync command visibility for guild ${guildId}:`, error);
+    }
+  }
 }
 
 (async () => {
@@ -344,6 +414,10 @@ client.once('clientReady', () => {
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
   startVeriPurgeLoop(client, verify, saveVerify);
+
+  syncCommandVisibilityForAllGuilds().catch((error) => {
+    console.error('Failed to sync command visibility across guilds on ready:', error);
+  });
 });
 
 client.login(process.env.BOT_TOKEN);

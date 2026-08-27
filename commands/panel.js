@@ -54,7 +54,12 @@ function canManagePanels(interaction, commandAccess) {
   if (!interaction.inGuild()) return false;
 
   const effectivePermissions = interaction.memberPermissions || interaction.member?.permissions;
-  if (effectivePermissions?.has(PermissionFlagsBits.ManageRoles | PermissionFlagsBits.ManageMessages)) {
+  const hasNativePermission =
+    effectivePermissions?.has(PermissionFlagsBits.ManageGuild) ||
+    effectivePermissions?.has(PermissionFlagsBits.ManageRoles) ||
+    effectivePermissions?.has(PermissionFlagsBits.ManageMessages);
+
+  if (hasNativePermission) {
     return true;
   }
 
@@ -166,7 +171,6 @@ module.exports = {
   data: {
     name: 'panel',
     description: 'Manage reaction role panels',
-    default_member_permissions: (PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageRoles | PermissionFlagsBits.ManageMessages).toString(),
     dm_permission: false,
     options: [
       {

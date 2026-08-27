@@ -1,4 +1,57 @@
-const { ApplicationCommandOptionType, PermissionFlagsBits } = require('discord.js');
+const {
+  ActionRowBuilder,
+  ApplicationCommandOptionType,
+  ModalBuilder,
+  PermissionFlagsBits,
+  TextInputBuilder,
+  TextInputStyle,
+} = require('discord.js');
+
+function normalizeGreetingEntry(entry) {
+  if (typeof entry === 'string') {
+    return { text: entry, embed: false };
+  }
+
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  if (typeof entry.text !== 'string') {
+    return null;
+  }
+
+  return {
+    text: entry.text,
+    embed: Boolean(entry.embed),
+  };
+}
+
+function normalizeGreetingConfig(cfg) {
+  const rawMsgs = Array.isArray(cfg?.msgs) ? cfg.msgs : [];
+  return {
+    msgs: rawMsgs.map(normalizeGreetingEntry).filter(Boolean),
+    channelId: cfg?.channelId || null,
+    deleteAfterSeconds: Number.isInteger(cfg?.deleteAfterSeconds) && cfg.deleteAfterSeconds > 0
+      ? cfg.deleteAfterSeconds
+      : null,
+  };
+}
+
+function buildGreetingEditModal(index, entry) {
+  return new ModalBuilder()
+    .setCustomId(`greeting-edit:${index}`)
+    .setTitle(`Edit Greeting #${index + 1}`)
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('greeting_text')
+          .setLabel('Greeting message')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+          .setValue(entry.text || '')
+      )
+    );
+}
 
 module.exports = {
   data: {
@@ -10,14 +63,80 @@ module.exports = {
       {
         name: 'add',
         description: 'Add a welcome greeting',
-        type: ApplicationCommandOptionType.Subcommand,
-        options: [{ name: 'text', description: 'Greeting text', type: ApplicationCommandOptionType.String, required: true }],
+        type: ApplicationCommandOptionType.SubcommandGroup,
+        options: [
+          {
+            name: 'text',
+            description: 'Add a plain text greeting',
+            type: ApplicationCommandOptionType.Subcommand,
+            options: [
+              {
+                name: 'message',
+                description: 'Greeting text',
+                type: ApplicationCommandOptionType.String,
+                required: true,
+              },
+            ],
+          },
+          {
+            name: 'embed',
+            description: 'Add an embed greeting',
+            type: ApplicationCommandOptionType.Subcommand,
+            options: [
+              {
+                name: 'message',
+                description: 'Greeting text',
+                type: ApplicationCommandOptionType.String,
+                required: true,
+              },
+            ],
+          },
+        ],
       },
       {
         name: 'channel',
         description: 'Set the channel for join greetings',
         type: ApplicationCommandOptionType.Subcommand,
         options: [{ name: 'channel', description: 'Channel for welcome messages', type: ApplicationCommandOptionType.Channel, required: true }],
+      },
+      {
+        name: 'autodelete',
+        description: 'Set auto-delete timeout for greeting messages',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
+          {
+            name: 'seconds',
+            description: 'Delete delay in seconds (0 disables auto-delete)',
+            type: ApplicationCommandOptionType.Integer,
+            required: true,
+            min_value: 0,
+            max_value: 604800,
+          },
+        ],
+      },
+      {
+        name: 'edit',
+        description: 'Edit one greeting by number',
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
+          {
+            name: 'number',
+            description: 'Greeting number from /greeting list',
+            type: ApplicationCommandOptionType.Integer,
+            required: true,
+            min_value: 1,
+          },
+          {
+            name: 'format',
+            description: 'Optionally switch this greeting between text and embed format',
+            type: ApplicationCommandOptionType.String,
+            required: false,
+            choices: [
+              { name: 'text', value: 'text' },
+              { name: 'embed', value: 'embed' },
+            ],
+          },
+        ],
       },
       {
         name: 'list',
@@ -59,14 +178,18 @@ module.exports = {
       return;
     }
 
+    const group = interaction.options.getSubcommandGroup(false);
     const sub = interaction.options.getSubcommand();
-    const cfg = greetings.get(interaction.guildId) || { msgs: [], channelId: null };
+    const cfg = normalizeGreetingConfig(greetings.get(interaction.guildId) || { msgs: [], channelId: null, deleteAfterSeconds: null });
 
-    if (sub === 'add') {
-      cfg.msgs.push(interaction.options.getString('text', true));
+    if (group === 'add' && (sub === 'text' || sub === 'embed')) {
+      cfg.msgs.push({
+        text: interaction.options.getString('message', true),
+        embed: sub === 'embed',
+      });
       greetings.set(interaction.guildId, cfg);
       saveGreetings();
-      await interaction.reply({ content: `Added greeting #${cfg.msgs.length}.`, flags: 64 });
+      await interaction.reply({ content: `Added ${sub} greeting #${cfg.msgs.length}.`, flags: 64 });
       return;
     }
 
@@ -79,16 +202,56 @@ module.exports = {
       return;
     }
 
+    if (sub === 'autodelete') {
+      const seconds = interaction.options.getInteger('seconds', true);
+      cfg.deleteAfterSeconds = seconds > 0 ? seconds : null;
+      greetings.set(interaction.guildId, cfg);
+      saveGreetings();
+      await interaction.reply({
+        content: cfg.deleteAfterSeconds
+          ? `Greeting auto-delete set to ${cfg.deleteAfterSeconds} second${cfg.deleteAfterSeconds === 1 ? '' : 's'}.`
+          : 'Greeting auto-delete disabled.',
+        flags: 64,
+      });
+      return;
+    }
+
+    if (sub === 'edit') {
+      const number = interaction.options.getInteger('number', true);
+      const index = number - 1;
+      if (index < 0 || index >= cfg.msgs.length) {
+        await interaction.reply({ content: 'That greeting number does not exist.', flags: 64 });
+        return;
+      }
+
+      const format = interaction.options.getString('format');
+      if (format === 'text' || format === 'embed') {
+        cfg.msgs[index].embed = format === 'embed';
+        greetings.set(interaction.guildId, cfg);
+        saveGreetings();
+      }
+
+      await interaction.showModal(buildGreetingEditModal(index, cfg.msgs[index]));
+      return;
+    }
+
     if (sub === 'list') {
       if (!cfg.msgs.length) {
         await interaction.reply({ content: 'No greetings yet.', flags: 64 });
         return;
       }
-      await interaction.reply({ content: `Greetings:\n${cfg.msgs.map((t, i) => `${i + 1}. ${t}`).join('\n')}`, flags: 64 });
+
+      const autoDeleteSummary = cfg.deleteAfterSeconds
+        ? `Auto-delete: ${cfg.deleteAfterSeconds}s`
+        : 'Auto-delete: disabled';
+      const channelSummary = cfg.channelId ? `Channel: <#${cfg.channelId}>` : 'Channel: not set';
+      const list = cfg.msgs
+        .map((entry, i) => `${i + 1}. [${entry.embed ? 'embed' : 'text'}] ${entry.text}`)
+        .join('\n');
+      await interaction.reply({ content: `${channelSummary}\n${autoDeleteSummary}\n\nGreetings:\n${list}`, flags: 64 });
       return;
     }
 
-    const group = interaction.options.getSubcommandGroup(false);
     if (group === 'remove') {
       if (sub === 'all') {
         if (!cfg.msgs.length) {
@@ -140,4 +303,35 @@ module.exports = {
       }
     }
   },
+};
+
+module.exports.handleModalSubmit = async function handleModalSubmit(interaction, greetings, saveGreetings) {
+  if (!interaction.inGuild() || !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    await interaction.reply({ content: 'You need Manage Server permission.', flags: 64 });
+    return;
+  }
+
+  const [, indexRaw] = interaction.customId.split(':');
+  const index = Number.parseInt(indexRaw, 10);
+  if (!Number.isInteger(index) || index < 0) {
+    await interaction.reply({ content: 'Invalid greeting edit request.', flags: 64 });
+    return;
+  }
+
+  const cfg = normalizeGreetingConfig(greetings.get(interaction.guildId) || { msgs: [], channelId: null, deleteAfterSeconds: null });
+  if (index >= cfg.msgs.length) {
+    await interaction.reply({ content: 'That greeting no longer exists.', flags: 64 });
+    return;
+  }
+
+  const nextText = interaction.fields.getTextInputValue('greeting_text').trim();
+  if (!nextText) {
+    await interaction.reply({ content: 'Greeting text cannot be empty.', flags: 64 });
+    return;
+  }
+
+  cfg.msgs[index].text = nextText;
+  greetings.set(interaction.guildId, cfg);
+  saveGreetings();
+  await interaction.reply({ content: `Updated greeting #${index + 1}.`, flags: 64 });
 };

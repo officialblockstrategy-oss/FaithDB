@@ -63,8 +63,11 @@ The goal is to keep the feature set small, predictable, and easy to maintain.
 - `unclean` — disable auto-clean for a channel
 
 ### `/greeting`
-- `add` — add a greeting template
+- `add text` — add a plain text greeting template
+- `add embed` — add an embed greeting template
 - `channel` — set the channel for greetings
+- `autodelete` — set greeting auto-delete seconds (0 disables)
+- `edit` — edit a greeting by number and optionally switch format (`text` or `embed`)
 - `list` — list all greeting templates
 - `remove all` — remove all greetings
 - `remove number` — remove greeting entries by number
