@@ -171,6 +171,7 @@ module.exports = {
   data: {
     name: 'panel',
     description: 'Manage reaction role panels',
+    default_member_permissions: '0',
     dm_permission: false,
     options: [
       {
