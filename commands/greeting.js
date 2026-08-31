@@ -7,9 +7,13 @@ const {
   TextInputStyle,
 } = require('discord.js');
 
+function createGreetingId() {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function normalizeGreetingEntry(entry) {
   if (typeof entry === 'string') {
-    return { text: entry, embed: false };
+    return { id: createGreetingId(), text: entry, embed: false };
   }
 
   if (!entry || typeof entry !== 'object') {
@@ -21,6 +25,7 @@ function normalizeGreetingEntry(entry) {
   }
 
   return {
+    id: typeof entry.id === 'string' && entry.id.trim() ? entry.id : createGreetingId(),
     text: entry.text,
     embed: Boolean(entry.embed),
   };
@@ -39,7 +44,7 @@ function normalizeGreetingConfig(cfg) {
 
 function buildGreetingEditModal(index, entry) {
   return new ModalBuilder()
-    .setCustomId(`greeting-edit:${index}`)
+    .setCustomId(`greeting-edit:${entry.id}`)
     .setTitle(`Edit Greeting #${index + 1}`)
     .addComponents(
       new ActionRowBuilder().addComponents(
@@ -184,6 +189,7 @@ module.exports = {
 
     if (group === 'add' && (sub === 'text' || sub === 'embed')) {
       cfg.msgs.push({
+        id: createGreetingId(),
         text: interaction.options.getString('message', true),
         embed: sub === 'embed',
       });
@@ -311,15 +317,15 @@ module.exports.handleModalSubmit = async function handleModalSubmit(interaction,
     return;
   }
 
-  const [, indexRaw] = interaction.customId.split(':');
-  const index = Number.parseInt(indexRaw, 10);
-  if (!Number.isInteger(index) || index < 0) {
+  const [, greetingId] = interaction.customId.split(':');
+  if (!greetingId) {
     await interaction.reply({ content: 'Invalid greeting edit request.', flags: 64 });
     return;
   }
 
   const cfg = normalizeGreetingConfig(greetings.get(interaction.guildId) || { msgs: [], channelId: null, deleteAfterSeconds: null });
-  if (index >= cfg.msgs.length) {
+  const index = cfg.msgs.findIndex((entry) => entry.id === greetingId);
+  if (index === -1) {
     await interaction.reply({ content: 'That greeting no longer exists.', flags: 64 });
     return;
   }

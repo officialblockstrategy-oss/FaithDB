@@ -85,7 +85,9 @@ function loadGreetings() {
   for (const [guildId, cfg] of loaded) {
     if (Array.isArray(cfg)) {
       greetings.set(guildId, {
-        msgs: cfg.filter((msg) => typeof msg === 'string').map((text) => ({ text, embed: false })),
+        msgs: cfg
+          .filter((msg) => typeof msg === 'string')
+          .map((text) => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, text, embed: false })),
         channelId: null,
         deleteAfterSeconds: null,
       });
@@ -93,7 +95,11 @@ function loadGreetings() {
       const msgs = (Array.isArray(cfg.msgs) ? cfg.msgs : [])
         .map((entry) => {
           if (typeof entry === 'string') {
-            return { text: entry, embed: false };
+            return {
+              id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+              text: entry,
+              embed: false,
+            };
           }
 
           if (!entry || typeof entry !== 'object' || typeof entry.text !== 'string') {
@@ -101,6 +107,9 @@ function loadGreetings() {
           }
 
           return {
+            id: typeof entry.id === 'string' && entry.id.trim()
+              ? entry.id
+              : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
             text: entry.text,
             embed: Boolean(entry.embed),
           };
@@ -128,7 +137,11 @@ function saveGreetings() {
           ? cfg.msgs
               .map((entry) => {
                 if (typeof entry === 'string') {
-                  return { text: entry, embed: false };
+                  return {
+                    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+                    text: entry,
+                    embed: false,
+                  };
                 }
 
                 if (!entry || typeof entry !== 'object' || typeof entry.text !== 'string') {
@@ -136,6 +149,9 @@ function saveGreetings() {
                 }
 
                 return {
+                  id: typeof entry.id === 'string' && entry.id.trim()
+                    ? entry.id
+                    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
                   text: entry.text,
                   embed: Boolean(entry.embed),
                 };
