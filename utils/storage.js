@@ -26,8 +26,9 @@ function saveJson(filePath, value) {
 
 function loadMap(filePath, validate, transform = (value) => value) {
   const data = loadJson(filePath, {});
+  const entries = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
   const map = new Map();
-  for (const [key, value] of Object.entries(data)) {
+  for (const [key, value] of Object.entries(entries)) {
     try {
       if (validate(value, key)) {
         map.set(key, transform(value, key));
