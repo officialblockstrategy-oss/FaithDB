@@ -34,7 +34,6 @@ const TICKET_TYPES = {
 const DEFAULT_PANEL = {
   imageUrl: 'https://placehold.co/1200x240/png?text=example.image.url',
   optionCount: 1,
-  separateBlocks: false,
   color: '#5865F2',
 };
 
@@ -113,10 +112,7 @@ function parseColor(color) {
 function buildPanelComponents(config, profileName) {
   const entries = Object.entries(TICKET_TYPES).slice(0, config.panel.optionCount);
   const containers = [];
-  const blocks = config.panel.separateBlocks
-    ? entries.map((entry) => [entry])
-    : [entries];
-  const useNativeDividers = !config.panel.separateBlocks && entries.length <= 4;
+  const blocks = entries.map((entry) => [entry]);
 
   for (const [blockIndex, blockEntries] of blocks.entries()) {
     const container = new ContainerBuilder();
@@ -130,15 +126,13 @@ function buildPanelComponents(config, profileName) {
 
     for (const [index, [type]] of blockEntries.entries()) {
       const content = config.content[type];
-      const inlineDivider = !useNativeDividers && index > 0 ? '\n\n━━━━━━━━━━━━━━━━' : '';
       const button = new ButtonBuilder()
         .setCustomId(`ticket-open:${profileName}:${type}`)
         .setEmoji(content.emoji)
         .setStyle(ButtonStyle.Secondary);
-      if (useNativeDividers && index > 0) container.addSeparatorComponents(new SeparatorBuilder());
       container.addSectionComponents(
         new SectionBuilder()
-          .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${inlineDivider}${index > 0 ? '\n' : ''}**${content.label}**\n${content.description}`))
+          .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${content.label}**\n${content.description}`))
           .setButtonAccessory(button)
       );
     }
@@ -168,11 +162,9 @@ function buildIntakeModal(type, config, profileName) {
 function buildEditModal(config, profileName) {
   const imageUrl = typeof config.panel.imageUrl === 'string' ? config.panel.imageUrl.slice(0, 4000) : DEFAULT_PANEL.imageUrl;
   const optionCount = String(Number(config.panel.optionCount) || 1);
-  const separateBlocks = config.panel.separateBlocks === true ? '1' : '0';
   return new ModalBuilder().setCustomId(`ticket-panel-edit:${profileName}`).setTitle('Edit ticket panel').addComponents(
     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_image_url').setLabel('Header image URL').setStyle(TextInputStyle.Short).setRequired(true).setValue(imageUrl)),
     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_option_count').setLabel('Number of ticket options (1-8)').setStyle(TextInputStyle.Short).setRequired(true).setValue(optionCount)),
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_separate_blocks').setLabel('Separate blocks? Enter 1=yes or 0=no').setStyle(TextInputStyle.Short).setRequired(true).setValue(separateBlocks)),
   );
 }
 
@@ -381,13 +373,10 @@ module.exports = {
       const config = getConfig(context.ticketConfigs, interaction.guildId, profileName);
       const imageUrl = interaction.fields.getTextInputValue('panel_image_url').trim();
       const optionCount = Number.parseInt(interaction.fields.getTextInputValue('panel_option_count').trim(), 10);
-      const separateBlocksValue = interaction.fields.getTextInputValue('panel_separate_blocks').trim();
       if (!/^https?:\/\//i.test(imageUrl)) { await interaction.reply({ content: 'The header image URL must begin with http:// or https://.', flags: 64 }); return; }
       if (!Number.isInteger(optionCount) || optionCount < 1 || optionCount > 8) { await interaction.reply({ content: 'The number of ticket options must be between 1 and 8.', flags: 64 }); return; }
-      if (separateBlocksValue !== '0' && separateBlocksValue !== '1') { await interaction.reply({ content: 'Separate blocks must be set to 1 for yes or 0 for no.', flags: 64 }); return; }
       config.panel.imageUrl = imageUrl;
       config.panel.optionCount = optionCount;
-      config.panel.separateBlocks = separateBlocksValue === '1';
       const panels = [...context.ticketPanels.entries()].filter(([, value]) => value.guildId === interaction.guildId && (value.profileName || 'default') === profileName);
       let updatedPanels = 0;
       let removedPanels = 0;
