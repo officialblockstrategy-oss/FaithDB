@@ -111,7 +111,9 @@ function parseColor(color) {
 function buildPanelComponents(config, messageId) {
   const entries = Object.entries(TICKET_TYPES).slice(0, config.panel.optionCount);
   const containers = [];
-  const blocks = config.panel.separateBlocks ? entries.map((entry) => [entry]) : [entries];
+  const blocks = config.panel.separateBlocks
+    ? entries.map((entry) => [entry])
+    : [entries];
 
   for (const [blockIndex, blockEntries] of blocks.entries()) {
     const container = new ContainerBuilder();
@@ -125,14 +127,14 @@ function buildPanelComponents(config, messageId) {
 
     for (const [index, [type]] of blockEntries.entries()) {
       const content = config.content[type];
-      const divider = config.panel.separateBlocks || index === blockEntries.length - 1 ? '' : '\n\n━━━━━━━━━━━━━━━━';
       const button = new ButtonBuilder()
         .setCustomId(`ticket-open:${messageId}:${type}`)
         .setEmoji(content.emoji)
         .setStyle(ButtonStyle.Secondary);
+      if (index > 0) container.addSeparatorComponents(new SeparatorBuilder());
       container.addSectionComponents(
         new SectionBuilder()
-          .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${content.label}**\n${content.description}${divider}`))
+          .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${content.label}**\n${content.description}`))
           .setButtonAccessory(button)
       );
     }
@@ -338,7 +340,7 @@ module.exports = {
         const channel = await interaction.client.channels.fetch(panel.channelId).catch(() => null);
         const message = channel?.messages ? await channel.messages.fetch(messageId).catch(() => null) : null;
         if (message) {
-          await message.edit({ flags: MessageFlags.IsComponentsV2, components: buildPanelComponents(config, messageId) });
+          await message.edit({ components: buildPanelComponents(config, messageId) });
           updatedPanels += 1;
         } else {
           context.ticketPanels.delete(messageId);
