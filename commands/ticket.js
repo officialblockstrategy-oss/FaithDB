@@ -386,12 +386,18 @@ module.exports = {
       const panels = [...context.ticketPanels.entries()].filter(([, value]) => value.guildId === interaction.guildId && (value.profileName || 'default') === profileName);
       let updatedPanels = 0;
       let removedPanels = 0;
+      let failedPanels = 0;
       for (const [messageId, panel] of panels) {
         const channel = await interaction.client.channels.fetch(panel.channelId).catch(() => null);
         const message = channel?.messages ? await channel.messages.fetch(messageId).catch(() => null) : null;
         if (message) {
-          await message.edit({ components: buildPanelComponents(config, profileName) });
-          updatedPanels += 1;
+          try {
+            await message.edit({ components: buildPanelComponents(config, profileName) });
+            updatedPanels += 1;
+          } catch (error) {
+            failedPanels += 1;
+            console.error(`Failed to refresh ticket panel ${messageId}:`, error);
+          }
         } else {
           context.ticketPanels.delete(messageId);
           removedPanels += 1;
@@ -399,7 +405,7 @@ module.exports = {
       }
       context.saveTicketPanels();
       saveConfig(context, interaction.guildId, config, profileName);
-      await interaction.reply({ content: `Ticket panel profile "${profileName}" updated. Refreshed ${updatedPanels} panel${updatedPanels === 1 ? '' : 's'}${removedPanels ? ` and removed ${removedPanels} stale record${removedPanels === 1 ? '' : 's'}` : ''}.`, flags: 64 });
+      await interaction.reply({ content: `Ticket panel profile "${profileName}" updated. Refreshed ${updatedPanels} panel${updatedPanels === 1 ? '' : 's'}${removedPanels ? `, removed ${removedPanels} stale record${removedPanels === 1 ? '' : 's'}` : ''}${failedPanels ? `, and ${failedPanels} panel${failedPanels === 1 ? '' : 's'} could not be refreshed` : ''}.`, flags: 64 });
       return;
     }
     if (interaction.customId.startsWith('ticket-content-edit:')) {
