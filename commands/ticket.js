@@ -124,12 +124,12 @@ function buildPanelComponents(config, messageId) {
     }
 
     for (const [index, [type]] of blockEntries.entries()) {
-    const content = config.content[type];
-    const divider = config.panel.separateBlocks || index === blockEntries.length - 1 ? '' : '\n────────────';
-    const button = new ButtonBuilder()
-      .setCustomId(`ticket-open:${messageId}:${type}`)
-      .setEmoji(content.emoji)
-      .setStyle(ButtonStyle.Secondary);
+      const content = config.content[type];
+      const divider = config.panel.separateBlocks || index === blockEntries.length - 1 ? '' : '\n\n━━━━━━━━━━━━━━━━';
+      const button = new ButtonBuilder()
+        .setCustomId(`ticket-open:${messageId}:${type}`)
+        .setEmoji(content.emoji)
+        .setStyle(ButtonStyle.Secondary);
       container.addSectionComponents(
         new SectionBuilder()
           .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${content.label}**\n${content.description}${divider}`))
@@ -332,14 +332,23 @@ module.exports = {
       config.panel.optionCount = optionCount;
       config.panel.separateBlocks = separateBlocksValue === '1';
       const panels = [...context.ticketPanels.entries()].filter(([, value]) => value.guildId === interaction.guildId && (value.profileName || 'default') === profileName);
+      let updatedPanels = 0;
+      let removedPanels = 0;
       for (const [messageId, panel] of panels) {
         const channel = await interaction.client.channels.fetch(panel.channelId).catch(() => null);
         const message = channel?.messages ? await channel.messages.fetch(messageId).catch(() => null) : null;
-        if (message) await message.edit({ components: buildPanelComponents(config, messageId) });
-        else context.ticketPanels.delete(messageId);
+        if (message) {
+          await message.edit({ flags: MessageFlags.IsComponentsV2, components: buildPanelComponents(config, messageId) });
+          updatedPanels += 1;
+        } else {
+          context.ticketPanels.delete(messageId);
+          removedPanels += 1;
+        }
       }
       context.saveTicketPanels();
-      saveConfig(context, interaction.guildId, config, profileName); await interaction.reply({ content: `Ticket panel profile "${profileName}" updated.`, flags: 64 }); return;
+      saveConfig(context, interaction.guildId, config, profileName);
+      await interaction.reply({ content: `Ticket panel profile "${profileName}" updated. Refreshed ${updatedPanels} panel${updatedPanels === 1 ? '' : 's'}${removedPanels ? ` and removed ${removedPanels} stale record${removedPanels === 1 ? '' : 's'}` : ''}.`, flags: 64 });
+      return;
     }
     if (interaction.customId.startsWith('ticket-content-edit:')) {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) { await interaction.reply({ content: 'You need Manage Server permission.', flags: 64 }); return; }
