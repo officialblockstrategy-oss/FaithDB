@@ -39,6 +39,9 @@ const DEFAULT_PANEL = {
 
 function normalizeProfile(config = {}) {
   const panel = { ...DEFAULT_PANEL, ...(config.panel || {}) };
+  if (typeof panel.imageUrl !== 'string' || !/^https?:\/\//i.test(panel.imageUrl)) {
+    panel.imageUrl = DEFAULT_PANEL.imageUrl;
+  }
   if (config.panel && !Object.prototype.hasOwnProperty.call(config.panel, 'imageUrl')) {
     panel.optionCount = 1;
   }
@@ -413,8 +416,29 @@ module.exports = {
         opening: interaction.fields.getTextInputValue('opening').trim(),
         questions: interaction.fields.getTextInputValue('questions').split('\n').map((question) => question.trim()).filter(Boolean).slice(0, 8),
       };
+      let updatedPanels = 0;
+      let removedPanels = 0;
+      let failedPanels = 0;
+      const panels = [...context.ticketPanels.entries()].filter(([, value]) => value.guildId === interaction.guildId && (value.profileName || 'default') === profileName);
+      for (const [messageId, panel] of panels) {
+        const channel = await interaction.client.channels.fetch(panel.channelId).catch(() => null);
+        const message = channel?.messages ? await channel.messages.fetch(messageId).catch(() => null) : null;
+        if (!message) {
+          context.ticketPanels.delete(messageId);
+          removedPanels += 1;
+          continue;
+        }
+        try {
+          await message.edit({ components: buildPanelComponents(config, profileName) });
+          updatedPanels += 1;
+        } catch (error) {
+          failedPanels += 1;
+          console.error(`Failed to refresh ticket panel ${messageId} after content edit:`, error);
+        }
+      }
+      context.saveTicketPanels();
       saveConfig(context, interaction.guildId, config, profileName);
-      await interaction.reply({ content: `${TICKET_TYPES[type].label} ticket content updated.`, flags: 64 }); return;
+      await interaction.reply({ content: `${TICKET_TYPES[type].label} ticket content updated. Refreshed ${updatedPanels} panel${updatedPanels === 1 ? '' : 's'}${removedPanels ? `, removed ${removedPanels} stale record${removedPanels === 1 ? '' : 's'}` : ''}${failedPanels ? `, and ${failedPanels} panel${failedPanels === 1 ? '' : 's'} could not be refreshed` : ''}.`, flags: 64 }); return;
     }
     if (interaction.customId.startsWith('ticket-intake:')) { const [, profileName, type] = interaction.customId.split(':'); const config = getConfig(context.ticketConfigs, interaction.guildId, profileName || 'default'); const answers = config.content[type].questions.slice(0, 4).map((_, index) => interaction.fields.getTextInputValue(`answer_${index}`)); await createTicket(interaction, context, type, answers, profileName || 'default'); }
   },
