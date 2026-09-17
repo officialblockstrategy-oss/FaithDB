@@ -5,11 +5,15 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
+  ContainerBuilder,
   EmbedBuilder,
+  MessageFlags,
   ModalBuilder,
   PermissionFlagsBits,
+  SectionBuilder,
   TextInputBuilder,
   TextInputStyle,
+  TextDisplayBuilder,
 } = require('discord.js');
 
 const TICKET_TYPES = {
@@ -64,16 +68,28 @@ function parseColor(color) {
   return /^[0-9a-f]{6}$/i.test(value) ? parseInt(value, 16) : 0x5865f2;
 }
 
-function buildPanelEmbed(config) {
-  const embed = new EmbedBuilder().setTitle(config.panel.title).setDescription(config.panel.description).setColor(parseColor(config.panel.color));
-  for (const definition of Object.values(TICKET_TYPES)) embed.addFields({ name: definition.label, value: definition.description, inline: false });
-  if (config.panel.footer) embed.setFooter({ text: config.panel.footer });
-  return embed;
-}
+function buildPanelComponents(config, messageId) {
+  const container = new ContainerBuilder();
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(`## ${config.panel.title}\n${config.panel.description}`)
+  );
 
-function buildPanelRows(messageId) {
-  const buttons = Object.entries(TICKET_TYPES).map(([type, definition]) => new ButtonBuilder().setCustomId(`ticket-open:${messageId}:${type}`).setEmoji(definition.emoji).setStyle(ButtonStyle.Secondary));
-  return [new ActionRowBuilder().addComponents(buttons.slice(0, 4)), new ActionRowBuilder().addComponents(buttons.slice(4))];
+  for (const [type, definition] of Object.entries(TICKET_TYPES)) {
+    const button = new ButtonBuilder()
+      .setCustomId(`ticket-open:${messageId}:${type}`)
+      .setEmoji(definition.emoji)
+      .setStyle(ButtonStyle.Secondary);
+    const section = new SectionBuilder()
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${definition.label}**\n${definition.description}`))
+      .setButtonAccessory(button);
+    container.addSectionComponents(section);
+  }
+
+  if (config.panel.footer) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${config.panel.footer}`));
+  }
+
+  return [container];
 }
 
 function buildTicketControls(channelId) {
@@ -216,7 +232,7 @@ module.exports = {
     if (group === 'create' && subcommand === 'panel') {
       const target = interaction.options.getChannel('channel', true);
       if (!target.isTextBased?.()) { await interaction.reply({ content: 'Choose a text channel.', flags: 64 }); return; }
-      const sent = await target.send({ embeds: [buildPanelEmbed(config)], components: buildPanelRows('pending') }); await sent.edit({ components: buildPanelRows(sent.id) });
+      const sent = await target.send({ flags: MessageFlags.IsComponentsV2, components: buildPanelComponents(config, 'pending') }); await sent.edit({ components: buildPanelComponents(config, sent.id) });
       context.ticketPanels.set(sent.id, { guildId: interaction.guildId, channelId: target.id }); context.saveTicketPanels(); await interaction.reply({ content: `Ticket panel posted in ${target}.`, flags: 64 }); return;
     }
     if (group === 'content' && subcommand === 'edit') {
@@ -244,7 +260,7 @@ module.exports = {
     if (interaction.customId === 'ticket-panel-edit') {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) { await interaction.reply({ content: 'You need Manage Server permission.', flags: 64 }); return; }
       const config = getConfig(context.ticketConfigs, interaction.guildId); config.panel.title = interaction.fields.getTextInputValue('panel_title').trim(); config.panel.description = interaction.fields.getTextInputValue('panel_description').trim(); config.panel.color = interaction.fields.getTextInputValue('panel_color').trim(); config.panel.footer = interaction.fields.getTextInputValue('panel_footer').trim();
-      const panel = [...context.ticketPanels.entries()].reverse().find(([, value]) => value.guildId === interaction.guildId && value.channelId === interaction.channelId); if (panel) { const message = await interaction.channel.messages.fetch(panel[0]).catch(() => null); if (message) await message.edit({ embeds: [buildPanelEmbed(config)], components: buildPanelRows(panel[0]) }); }
+      const panel = [...context.ticketPanels.entries()].reverse().find(([, value]) => value.guildId === interaction.guildId && value.channelId === interaction.channelId); if (panel) { const message = await interaction.channel.messages.fetch(panel[0]).catch(() => null); if (message) await message.edit({ components: buildPanelComponents(config, panel[0]) }); }
       context.ticketConfigs.set(interaction.guildId, config); context.saveTicketConfigs(); await interaction.reply({ content: 'Ticket panel updated.', flags: 64 }); return;
     }
     if (interaction.customId.startsWith('ticket-content-edit:')) {
