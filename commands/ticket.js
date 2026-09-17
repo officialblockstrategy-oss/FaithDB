@@ -10,6 +10,7 @@ const {
   MessageFlags,
   ModalBuilder,
   PermissionFlagsBits,
+  SeparatorBuilder,
   SectionBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -74,7 +75,8 @@ function buildPanelComponents(config, messageId) {
     new TextDisplayBuilder().setContent(`## ${config.panel.title}\n${config.panel.description}`)
   );
 
-  for (const [type, definition] of Object.entries(TICKET_TYPES)) {
+  for (const [index, [type, definition]] of Object.entries(TICKET_TYPES).entries()) {
+    if (index > 0) container.addSeparatorComponents(new SeparatorBuilder());
     const button = new ButtonBuilder()
       .setCustomId(`ticket-open:${messageId}:${type}`)
       .setEmoji(definition.emoji)
