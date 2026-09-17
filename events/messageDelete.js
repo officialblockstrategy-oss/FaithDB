@@ -1,7 +1,7 @@
 module.exports = {
   name: 'messageDelete',
   async execute(message, client, context) {
-    const { panels, savePanels, stickies, saveStickies } = context || {};
+    const { panels, savePanels, stickies, saveStickies, ticketPanels, saveTicketPanels } = context || {};
     const messageId = message.id;
 
     // Clean up reaction role panel if present
@@ -13,6 +13,17 @@ module.exports = {
       }
     } catch (err) {
       console.warn('Error cleaning reaction role panel on messageDelete:', err);
+    }
+
+    // Clean up a ticket panel if its message was deleted manually.
+    try {
+      if (ticketPanels && ticketPanels.has(messageId)) {
+        ticketPanels.delete(messageId);
+        if (typeof saveTicketPanels === 'function') saveTicketPanels();
+        console.log(`Cleaned up deleted ticket panel: ${messageId}`);
+      }
+    } catch (err) {
+      console.warn('Error cleaning ticket panel on messageDelete:', err);
     }
 
     // Clean up sticky if the deleted message was a sticky for its channel

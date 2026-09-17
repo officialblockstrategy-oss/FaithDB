@@ -26,6 +26,11 @@ module.exports = {
         return handleProfileNavigation(interaction, context, 'streak');
       }
 
+      if (interaction.isButton() && interaction.customId?.startsWith('ticket-')) {
+        const ticketCommand = client.commands.get('ticket');
+        if (ticketCommand?.handleButton) return ticketCommand.handleButton(interaction, context);
+      }
+
       // Handle select menu interactions for reaction role panels first.
       if (interaction.isStringSelectMenu()) {
         return handleReactionRoleSelect(interaction, context);
@@ -65,6 +70,11 @@ module.exports = {
             context.saveGreetings
           );
         }
+      }
+
+      if (interaction.isModalSubmit() && interaction.customId?.startsWith('ticket-')) {
+        const ticketCommand = client.commands.get('ticket');
+        if (ticketCommand?.handleModalSubmit) return ticketCommand.handleModalSubmit(interaction, context);
       }
 
       const commandName = interaction.commandName || interaction.command?.name;

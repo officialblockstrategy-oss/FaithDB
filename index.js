@@ -43,6 +43,12 @@ const kudos = new Map();
 const kudosFile = path.join(dataDir, 'kudos.json');
 const commandAccess = new Map();
 const commandAccessFile = path.join(dataDir, 'command-access.json');
+const ticketConfigs = new Map();
+const ticketConfigsFile = path.join(dataDir, 'ticket-configs.json');
+const ticketPanels = new Map();
+const ticketPanelsFile = path.join(dataDir, 'ticket-panels.json');
+const tickets = new Map();
+const ticketsFile = path.join(dataDir, 'tickets.json');
 const commandVisibilityConfig = {
   panel: { accessKey: 'panel' },
   panels: { accessKey: 'panel' },
@@ -272,6 +278,36 @@ function saveCommandAccess() {
   saveMap(commandAccessFile, commandAccess);
 }
 
+function loadTicketConfigs() {
+  const loaded = loadMap(ticketConfigsFile, (cfg) => cfg && typeof cfg === 'object');
+  for (const [guildId, cfg] of loaded) ticketConfigs.set(guildId, cfg);
+  console.log(`Loaded ${ticketConfigs.size} ticket configuration(s) from disk.`);
+}
+
+function saveTicketConfigs() {
+  saveMap(ticketConfigsFile, ticketConfigs);
+}
+
+function loadTicketPanels() {
+  const loaded = loadMap(ticketPanelsFile, (panel) => panel && typeof panel.guildId === 'string' && typeof panel.channelId === 'string');
+  for (const [messageId, panel] of loaded) ticketPanels.set(messageId, panel);
+  console.log(`Loaded ${ticketPanels.size} ticket panel(s) from disk.`);
+}
+
+function saveTicketPanels() {
+  saveMap(ticketPanelsFile, ticketPanels);
+}
+
+function loadTickets() {
+  const loaded = loadMap(ticketsFile, (ticket) => ticket && typeof ticket.guildId === 'string' && typeof ticket.channelId === 'string' && ticket.status === 'open');
+  for (const [channelId, ticket] of loaded) tickets.set(channelId, ticket);
+  console.log(`Loaded ${tickets.size} open ticket(s) from disk.`);
+}
+
+function saveTickets() {
+  saveMap(ticketsFile, tickets);
+}
+
 function normalizeCommandAccessBlock(accessProfile, accessKey) {
   const block = accessProfile?.[accessKey];
 
@@ -319,6 +355,9 @@ loadVerify();
 loadBumpDetection();
 loadKudos();
 loadCommandAccess();
+loadTicketConfigs();
+loadTicketPanels();
+loadTickets();
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
 
@@ -426,6 +465,12 @@ for (const file of eventFiles) {
     commandAccess,
     saveCommandAccess,
     syncCommandVisibilityForGuild,
+    ticketConfigs,
+    saveTicketConfigs,
+    ticketPanels,
+    saveTicketPanels,
+    tickets,
+    saveTickets,
   };
   if (event.once) {
     client.once(event.name, (...args) => event.execute(...args, client, context));
