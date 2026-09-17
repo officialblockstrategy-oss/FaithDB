@@ -116,6 +116,7 @@ function buildPanelComponents(config, profileName) {
   const blocks = config.panel.separateBlocks
     ? entries.map((entry) => [entry])
     : [entries];
+  const useNativeDividers = !config.panel.separateBlocks && entries.length <= 4;
 
   for (const [blockIndex, blockEntries] of blocks.entries()) {
     const container = new ContainerBuilder();
@@ -129,14 +130,15 @@ function buildPanelComponents(config, profileName) {
 
     for (const [index, [type]] of blockEntries.entries()) {
       const content = config.content[type];
+      const inlineDivider = !useNativeDividers && index > 0 ? '\n\n━━━━━━━━━━━━━━━━' : '';
       const button = new ButtonBuilder()
         .setCustomId(`ticket-open:${profileName}:${type}`)
         .setEmoji(content.emoji)
         .setStyle(ButtonStyle.Secondary);
-      if (index > 0) container.addSeparatorComponents(new SeparatorBuilder());
+      if (useNativeDividers && index > 0) container.addSeparatorComponents(new SeparatorBuilder());
       container.addSectionComponents(
         new SectionBuilder()
-          .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${content.label}**\n${content.description}`))
+          .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${inlineDivider}${index > 0 ? '\n' : ''}**${content.label}**\n${content.description}`))
           .setButtonAccessory(button)
       );
     }
