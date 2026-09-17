@@ -20,16 +20,16 @@ const {
 } = require('discord.js');
 
 const TICKET_TYPES = {
-  example: { label: 'example header', emoji: '🎫', description: 'example description', questions: ['example question'] },
-  creator: { label: 'Trusted Creator', emoji: '🎫', description: 'Apply for the Trusted Creator role.', questions: ['YouTube or creator channel', 'How long have you made content?', 'How would your content benefit this community?', 'Relevant links or examples'] },
-  partnership: { label: 'Partnership', emoji: '🎫', description: 'Discuss a partnership with the server.', questions: ['Your name and organization', 'What partnership are you proposing?', 'Relevant links or contact details', 'Anything else we should know'] },
-  report: { label: 'Member Report', emoji: '🎫', description: 'Privately report a member or incident.', questions: ['Member being reported', 'What happened?', 'When and where did it happen?', 'Message links or other evidence'] },
-  bug: { label: 'Bug Report', emoji: '🎫', description: 'Report a bot or server bug.', questions: ['What went wrong?', 'Steps to reproduce it', 'What did you expect to happen?', 'Screenshots, links, or platform'] },
-  appeal: { label: 'Ban Appeal', emoji: '🎫', description: 'Appeal a server ban.', questions: ['Your former username', 'Why should the ban be reconsidered?', 'What happened from your perspective?', 'Anything else you want staff to consider'] },
-  staff: { label: 'Staff Application', emoji: '🎫', description: 'Apply for a moderator or administrator role.', questions: ['Which staff role are you applying for?', 'Your relevant experience', 'Why would you be a good fit?', 'Your usual availability'] },
-  other: { label: 'Other', emoji: '🎫', description: 'Open a ticket for another reason.', questions: ['What can staff help with?', 'Please provide the relevant details', 'Links or evidence, if applicable', 'Anything else we should know'] },
-  example_two: { label: 'example header', emoji: '🎫', description: 'example description', questions: ['example question'] },
-  example_three: { label: 'example header', emoji: '🎫', description: 'example description', questions: ['example question'] },
+  example_1: { label: 'Placeholder Header', emoji: '🎫', description: 'Description example text', questions: ['Example question'] },
+  example_2: { label: 'Placeholder Header', emoji: '🎫', description: 'Description example text', questions: ['Example question'] },
+  example_3: { label: 'Placeholder Header', emoji: '🎫', description: 'Description example text', questions: ['Example question'] },
+  example_4: { label: 'Placeholder Header', emoji: '🎫', description: 'Description example text', questions: ['Example question'] },
+  example_5: { label: 'Placeholder Header', emoji: '🎫', description: 'Description example text', questions: ['Example question'] },
+  example_6: { label: 'Placeholder Header', emoji: '🎫', description: 'Description example text', questions: ['Example question'] },
+  example_7: { label: 'Placeholder Header', emoji: '🎫', description: 'Description example text', questions: ['Example question'] },
+  example_8: { label: 'Placeholder Header', emoji: '🎫', description: 'Description example text', questions: ['Example question'] },
+  example_9: { label: 'Placeholder Header', emoji: '🎫', description: 'Description example text', questions: ['Example question'] },
+  example_10: { label: 'Placeholder Header', emoji: '🎫', description: 'Description example text', questions: ['Example question'] },
 };
 
 const DEFAULT_PANEL = {
@@ -50,7 +50,7 @@ function normalizeConfig(config = {}) {
       label: typeof saved.label === 'string' && saved.label.trim() ? saved.label : definition.label,
       description: typeof saved.description === 'string' && saved.description.trim() ? saved.description : definition.description,
       emoji: typeof saved.emoji === 'string' && saved.emoji.trim() ? saved.emoji : definition.emoji,
-      opening: typeof saved.opening === 'string' && saved.opening.trim() ? saved.opening : type === 'example' ? 'example opening message' : `Thanks for contacting staff about **${definition.label}**. Staff will be with you shortly. Please answer the questions below while you wait.`,
+      opening: typeof saved.opening === 'string' && saved.opening.trim() ? saved.opening : 'Example opening message',
       questions: Array.isArray(saved.questions) && saved.questions.length ? saved.questions.slice(0, 8).map(String) : definition.questions,
     };
   }
@@ -214,9 +214,11 @@ module.exports = {
   data: {
     name: 'ticket', description: 'Manage support tickets', default_member_permissions: PermissionFlagsBits.ManageGuild.toString(), dm_permission: false,
     options: [
-      { name: 'create', description: 'Create a ticket panel', type: ApplicationCommandOptionType.SubcommandGroup, options: [{ name: 'panel', description: 'Post the ticket panel', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'channel', description: 'Channel where the panel should be posted', type: ApplicationCommandOptionType.Channel, required: true }] }] },
-      { name: 'edit', description: 'Edit one ticket option by row number', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'number', description: 'Option row number, from top to bottom', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1, max_value: 10 }] },
-      { name: 'panel', description: 'Edit ticket panel settings', type: ApplicationCommandOptionType.SubcommandGroup, options: [{ name: 'edit', description: 'Edit the panel image and number of options', type: ApplicationCommandOptionType.Subcommand }] },
+      { name: 'create', description: 'Create a ticket panel', type: ApplicationCommandOptionType.SubcommandGroup, options: [{ name: 'panel', description: 'Post the ticket panel in this channel', type: ApplicationCommandOptionType.Subcommand }] },
+      { name: 'edit', description: 'Edit ticket panel settings or row content', type: ApplicationCommandOptionType.SubcommandGroup, options: [
+        { name: 'panel', description: 'Edit the persistent panel profile', type: ApplicationCommandOptionType.Subcommand },
+        { name: 'number', description: 'Edit one ticket option by row number', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'number', description: 'Option row number, from top to bottom', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1, max_value: 10 }] },
+      ] },
       { name: 'grant', description: 'Grant ticket permissions to a role', type: ApplicationCommandOptionType.SubcommandGroup, options: [{ name: 'perms', description: 'Allow a role to manage tickets', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'role', description: 'Staff role', type: ApplicationCommandOptionType.Role, required: true }] }] },
       { name: 'config', description: 'Configure ticket destinations', type: ApplicationCommandOptionType.SubcommandGroup, options: [
         { name: 'category', description: 'Set the ticket category', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'category', description: 'Ticket category', type: ApplicationCommandOptionType.Channel, channel_types: [ChannelType.GuildCategory], required: true }] },
@@ -242,21 +244,19 @@ module.exports = {
       context.ticketConfigs.set(interaction.guildId, config); context.saveTicketConfigs(); await interaction.reply({ content: `Granted ticket permissions to ${role}.`, flags: 64 }); return;
     }
     if (group === 'create' && subcommand === 'panel') {
-      const target = interaction.options.getChannel('channel', true);
+      const target = interaction.channel;
       if (!target.isTextBased?.()) { await interaction.reply({ content: 'Choose a text channel.', flags: 64 }); return; }
       const sent = await target.send({ flags: MessageFlags.IsComponentsV2, components: buildPanelComponents(config, 'pending') }); await sent.edit({ components: buildPanelComponents(config, sent.id) });
       context.ticketPanels.set(sent.id, { guildId: interaction.guildId, channelId: target.id }); context.saveTicketPanels(); await interaction.reply({ content: `Ticket panel posted in ${target}.`, flags: 64 }); return;
     }
-    if (!group && subcommand === 'edit') {
+    if (group === 'edit' && subcommand === 'number') {
       const number = interaction.options.getInteger('number', true);
       const type = Object.keys(TICKET_TYPES)[number - 1];
       if (!type || number > config.panel.optionCount) { await interaction.reply({ content: `That row is not currently enabled. Choose a number from 1 to ${config.panel.optionCount}.`, flags: 64 }); return; }
       await interaction.showModal(buildContentEditModal(type, config));
       return;
     }
-    if (group === 'panel' && subcommand === 'edit') {
-      const panel = [...context.ticketPanels.entries()].reverse().find(([, value]) => value.guildId === interaction.guildId && value.channelId === interaction.channelId);
-      if (!panel) { await interaction.reply({ content: 'No ticket panel is registered in this channel.', flags: 64 }); return; }
+    if (group === 'edit' && subcommand === 'panel') {
       await interaction.showModal(buildEditModal(config));
     }
   },
@@ -280,7 +280,14 @@ module.exports = {
       if (!Number.isInteger(optionCount) || optionCount < 1 || optionCount > 10) { await interaction.reply({ content: 'The number of ticket options must be between 1 and 10.', flags: 64 }); return; }
       config.panel.imageUrl = imageUrl;
       config.panel.optionCount = optionCount;
-      const panel = [...context.ticketPanels.entries()].reverse().find(([, value]) => value.guildId === interaction.guildId && value.channelId === interaction.channelId); if (panel) { const message = await interaction.channel.messages.fetch(panel[0]).catch(() => null); if (message) await message.edit({ components: buildPanelComponents(config, panel[0]) }); }
+      const panels = [...context.ticketPanels.entries()].filter(([, value]) => value.guildId === interaction.guildId);
+      for (const [messageId, panel] of panels) {
+        const channel = await interaction.client.channels.fetch(panel.channelId).catch(() => null);
+        const message = channel?.messages ? await channel.messages.fetch(messageId).catch(() => null) : null;
+        if (message) await message.edit({ components: buildPanelComponents(config, messageId) });
+        else context.ticketPanels.delete(messageId);
+      }
+      context.saveTicketPanels();
       context.ticketConfigs.set(interaction.guildId, config); context.saveTicketConfigs(); await interaction.reply({ content: 'Ticket panel updated.', flags: 64 }); return;
     }
     if (interaction.customId.startsWith('ticket-content-edit:')) {
