@@ -250,6 +250,39 @@ async function closeTicket(interaction, context, saveTranscript) {
   await interaction.channel.delete('Ticket closed by staff');
 }
 
+async function deleteAllTicketData(interaction, context) {
+  const guildId = interaction.guildId;
+  let deletedPanels = 0;
+  let deletedTickets = 0;
+
+  for (const [messageId, panel] of [...context.ticketPanels.entries()]) {
+    if (panel.guildId !== guildId) continue;
+    const channel = await interaction.client.channels.fetch(panel.channelId).catch(() => null);
+    const message = channel?.messages ? await channel.messages.fetch(messageId).catch(() => null) : null;
+    if (message) await message.delete().catch(() => {});
+    context.ticketPanels.delete(messageId);
+    deletedPanels += 1;
+  }
+
+  for (const [channelId, ticket] of [...context.tickets.entries()]) {
+    if (ticket.guildId !== guildId) continue;
+    const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+    if (channel) await channel.delete('All ticket data reset by staff').catch(() => {});
+    context.tickets.delete(channelId);
+    deletedTickets += 1;
+  }
+
+  context.ticketConfigs.delete(guildId);
+  context.saveTicketPanels();
+  context.saveTickets();
+  context.saveTicketConfigs();
+
+  await interaction.reply({
+    content: `Ticket reset complete. Removed ${deletedPanels} panel record${deletedPanels === 1 ? '' : 's'} and ${deletedTickets} open ticket channel${deletedTickets === 1 ? '' : 's'}. Saved ticket profiles and configuration were cleared. Transcript log messages were left untouched.`,
+    flags: 64,
+  });
+}
+
 module.exports = {
   data: {
     name: 'ticket', description: 'Manage support tickets', default_member_permissions: PermissionFlagsBits.ManageGuild.toString(), dm_permission: false,
@@ -265,6 +298,7 @@ module.exports = {
         { name: 'logs', description: 'Set the transcript logs channel', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'channel', description: 'Transcript channel', type: ApplicationCommandOptionType.Channel, required: true }] },
         { name: 'staff', description: 'Set the staff mention role', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'role', description: 'Staff role', type: ApplicationCommandOptionType.Role, required: true }] },
       ] },
+      { name: 'delete', description: 'Delete ticket data', type: ApplicationCommandOptionType.SubcommandGroup, options: [{ name: 'all', description: 'Delete this server\'s ticket panels, open tickets, and saved ticket data', type: ApplicationCommandOptionType.Subcommand }] },
     ],
   },
 
@@ -283,6 +317,10 @@ module.exports = {
     if (group === 'grant' && subcommand === 'perms') {
       const role = interaction.options.getRole('role', true); if (!config.permissionRoles.includes(role.id)) config.permissionRoles.push(role.id);
       saveConfig(context, interaction.guildId, config, profileName); await interaction.reply({ content: `Granted ticket permissions to ${role}.`, flags: 64 }); return;
+    }
+    if (group === 'delete' && subcommand === 'all') {
+      await deleteAllTicketData(interaction, context);
+      return;
     }
     if (group === 'create' && subcommand === 'panel') {
       const target = interaction.channel;
