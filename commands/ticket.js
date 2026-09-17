@@ -60,7 +60,9 @@ function normalizeProfile(config = {}) {
 function normalizeGuildConfig(config = {}) {
   const legacyProfile = normalizeProfile(config);
   const rawProfiles = config.profiles && typeof config.profiles === 'object' ? config.profiles : {};
-  const profiles = Object.keys(rawProfiles).length
+  const hasProfiles = Object.keys(rawProfiles).length > 0;
+  if (!hasProfiles) legacyProfile.panel.optionCount = 1;
+  const profiles = hasProfiles
     ? Object.fromEntries(Object.entries(rawProfiles).map(([name, profile]) => [name, normalizeProfile(profile)]))
     : { default: legacyProfile };
   return {
@@ -329,8 +331,17 @@ module.exports = {
       const panelProfile = panelConfig.profileName;
       if (!target.isTextBased?.()) { await interaction.reply({ content: 'Choose a text channel.', flags: 64 }); return; }
       saveConfig(context, interaction.guildId, panelConfig, panelProfile);
-      const sent = await target.send({ flags: MessageFlags.IsComponentsV2, components: buildPanelComponents(panelConfig, panelProfile) });
-      context.ticketPanels.set(sent.id, { guildId: interaction.guildId, channelId: target.id, profileName: panelProfile }); context.saveTicketPanels(); await interaction.reply({ content: `Ticket panel posted in ${target} using the ${panelProfile} profile.`, flags: 64 }); return;
+      let sent;
+      try {
+        sent = await target.send({ flags: MessageFlags.IsComponentsV2, components: buildPanelComponents(panelConfig, panelProfile) });
+      } catch (error) {
+        console.error(`Failed to create ${panelProfile} ticket panel:`, error);
+        await interaction.reply({ content: `I could not create the ${panelProfile} ticket panel: ${error.message || 'Discord rejected the panel components.'}`, flags: 64 });
+        return;
+      }
+      context.ticketPanels.set(sent.id, { guildId: interaction.guildId, channelId: target.id, profileName: panelProfile });
+      context.saveTicketPanels();
+      await interaction.reply({ content: `Ticket panel posted in ${target} using the ${panelProfile} profile.`, flags: 64 }); return;
     }
     if (group === 'edit' && subcommand === 'number') {
       const number = interaction.options.getInteger('number', true);
