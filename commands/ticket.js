@@ -108,7 +108,7 @@ function parseColor(color) {
   return /^[0-9a-f]{6}$/i.test(value) ? parseInt(value, 16) : 0x5865f2;
 }
 
-function buildPanelComponents(config, messageId) {
+function buildPanelComponents(config, profileName) {
   const entries = Object.entries(TICKET_TYPES).slice(0, config.panel.optionCount);
   const containers = [];
   const blocks = config.panel.separateBlocks
@@ -128,7 +128,7 @@ function buildPanelComponents(config, messageId) {
     for (const [index, [type]] of blockEntries.entries()) {
       const content = config.content[type];
       const button = new ButtonBuilder()
-        .setCustomId(`ticket-open:${messageId}:${type}`)
+        .setCustomId(`ticket-open:${profileName}:${type}`)
         .setEmoji(content.emoji)
         .setStyle(ButtonStyle.Secondary);
       if (index > 0) container.addSeparatorComponents(new SeparatorBuilder());
@@ -152,9 +152,9 @@ function findOpenTicket(guild, tickets, userId) {
   return [...tickets.values()].find((ticket) => ticket.guildId === guild.id && ticket.ownerId === userId && ticket.status === 'open');
 }
 
-function buildIntakeModal(type, config, panelId) {
+function buildIntakeModal(type, config, profileName) {
   const questions = config.content[type].questions.slice(0, 4);
-  const modal = new ModalBuilder().setCustomId(`ticket-intake:${panelId}:${type}`).setTitle(`${config.content[type].label} ticket`);
+  const modal = new ModalBuilder().setCustomId(`ticket-intake:${profileName}:${type}`).setTitle(`${config.content[type].label} ticket`);
   for (let index = 0; index < questions.length; index += 1) {
     modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(`answer_${index}`).setLabel(questions[index].slice(0, 45)).setStyle(TextInputStyle.Paragraph).setRequired(index === 0).setMaxLength(1000)));
   }
@@ -286,10 +286,12 @@ module.exports = {
     }
     if (group === 'create' && subcommand === 'panel') {
       const target = interaction.channel;
-      const panelProfile = interaction.options.getString('profile') || 'default';
-      const panelConfig = getConfig(context.ticketConfigs, interaction.guildId, panelProfile);
+      const requestedProfile = interaction.options.getString('profile') || 'default';
+      const panelConfig = getConfig(context.ticketConfigs, interaction.guildId, requestedProfile);
+      const panelProfile = panelConfig.profileName;
       if (!target.isTextBased?.()) { await interaction.reply({ content: 'Choose a text channel.', flags: 64 }); return; }
-      const sent = await target.send({ flags: MessageFlags.IsComponentsV2, components: buildPanelComponents(panelConfig, 'pending') }); await sent.edit({ components: buildPanelComponents(panelConfig, sent.id) });
+      saveConfig(context, interaction.guildId, panelConfig, panelProfile);
+      const sent = await target.send({ flags: MessageFlags.IsComponentsV2, components: buildPanelComponents(panelConfig, panelProfile) });
       context.ticketPanels.set(sent.id, { guildId: interaction.guildId, channelId: target.id, profileName: panelProfile }); context.saveTicketPanels(); await interaction.reply({ content: `Ticket panel posted in ${target} using the ${panelProfile} profile.`, flags: 64 }); return;
     }
     if (group === 'edit' && subcommand === 'number') {
@@ -306,10 +308,9 @@ module.exports = {
 
   async handleButton(interaction, context) {
     if (interaction.customId.startsWith('ticket-open:')) {
-      const [, panelId, type] = interaction.customId.split(':');
-      const panel = context.ticketPanels.get(panelId);
-      const profileName = panel?.profileName || 'default';
-      if (TICKET_TYPES[type]) await interaction.showModal(buildIntakeModal(type, getConfig(context.ticketConfigs, interaction.guildId, profileName), panelId));
+      const [, panelKey, type] = interaction.customId.split(':');
+      const profileName = context.ticketPanels.get(panelKey)?.profileName || panelKey || 'default';
+      if (TICKET_TYPES[type]) await interaction.showModal(buildIntakeModal(type, getConfig(context.ticketConfigs, interaction.guildId, profileName), profileName));
       return;
     }
     if (interaction.customId.startsWith('ticket-close:')) {
@@ -340,7 +341,7 @@ module.exports = {
         const channel = await interaction.client.channels.fetch(panel.channelId).catch(() => null);
         const message = channel?.messages ? await channel.messages.fetch(messageId).catch(() => null) : null;
         if (message) {
-          await message.edit({ components: buildPanelComponents(config, messageId) });
+          await message.edit({ components: buildPanelComponents(config, profileName) });
           updatedPanels += 1;
         } else {
           context.ticketPanels.delete(messageId);
@@ -366,6 +367,6 @@ module.exports = {
       saveConfig(context, interaction.guildId, config, profileName);
       await interaction.reply({ content: `${TICKET_TYPES[type].label} ticket content updated.`, flags: 64 }); return;
     }
-    if (interaction.customId.startsWith('ticket-intake:')) { const [, panelId, type] = interaction.customId.split(':'); const profileName = context.ticketPanels.get(panelId)?.profileName || 'default'; const config = getConfig(context.ticketConfigs, interaction.guildId, profileName); const answers = config.content[type].questions.slice(0, 4).map((_, index) => interaction.fields.getTextInputValue(`answer_${index}`)); await createTicket(interaction, context, type, answers, profileName); }
+    if (interaction.customId.startsWith('ticket-intake:')) { const [, profileName, type] = interaction.customId.split(':'); const config = getConfig(context.ticketConfigs, interaction.guildId, profileName || 'default'); const answers = config.content[type].questions.slice(0, 4).map((_, index) => interaction.fields.getTextInputValue(`answer_${index}`)); await createTicket(interaction, context, type, answers, profileName || 'default'); }
   },
 };
