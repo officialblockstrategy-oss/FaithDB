@@ -164,10 +164,13 @@ function buildIntakeModal(type, config, profileName) {
 }
 
 function buildEditModal(config, profileName) {
+  const imageUrl = typeof config.panel.imageUrl === 'string' ? config.panel.imageUrl.slice(0, 4000) : DEFAULT_PANEL.imageUrl;
+  const optionCount = String(Number(config.panel.optionCount) || 1);
+  const separateBlocks = config.panel.separateBlocks === true ? '1' : '0';
   return new ModalBuilder().setCustomId(`ticket-panel-edit:${profileName}`).setTitle('Edit ticket panel').addComponents(
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_image_url').setLabel('Header image URL').setStyle(TextInputStyle.Short).setRequired(true).setValue(config.panel.imageUrl)),
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_option_count').setLabel('Number of ticket options (1-8)').setStyle(TextInputStyle.Short).setRequired(true).setValue(String(config.panel.optionCount))),
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_separate_blocks').setLabel('Separate block per ticket? Enter 1 for yes or 0 for no').setStyle(TextInputStyle.Short).setRequired(true).setValue(config.panel.separateBlocks ? '1' : '0')),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_image_url').setLabel('Header image URL').setStyle(TextInputStyle.Short).setRequired(true).setValue(imageUrl)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_option_count').setLabel('Number of ticket options (1-8)').setStyle(TextInputStyle.Short).setRequired(true).setValue(optionCount)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_separate_blocks').setLabel('Separate blocks? Enter 1=yes or 0=no').setStyle(TextInputStyle.Short).setRequired(true).setValue(separateBlocks)),
   );
 }
 
