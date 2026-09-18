@@ -194,7 +194,7 @@ function buildContentEditModal(type, config, profileName) {
   modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel('Option description').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.description)));
   modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Button emoji or short text').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80).setValue(content.emoji)));
   modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('opening').setLabel('Opening message').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.opening.slice(0, 4000))));
-  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('questions').setLabel('Questions, one per line (up to 8)').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.questions.join('\n').slice(0, 4000))));
+  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('questions').setLabel('Questions, one per line (up to 8)').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.questions.map((question, index) => `${index + 1}. ${question}`).join('\n').slice(0, 4000))));
   return modal;
 }
 
@@ -559,7 +559,7 @@ module.exports = {
         description: interaction.fields.getTextInputValue('description').trim(),
         emoji,
         opening: interaction.fields.getTextInputValue('opening').trim(),
-        questions: interaction.fields.getTextInputValue('questions').split('\n').map((question) => question.trim()).filter(Boolean).slice(0, 8),
+        questions: interaction.fields.getTextInputValue('questions').split('\n').map((question) => question.replace(/^\s*\d+[.)]\s*/, '').trim()).filter(Boolean).slice(0, 8),
       };
       let updatedPanels = 0;
       let removedPanels = 0;
