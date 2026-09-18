@@ -389,7 +389,7 @@ module.exports = {
         const message = channel?.messages ? await channel.messages.fetch(messageId).catch(() => null) : null;
         if (message) {
           try {
-            await message.edit({ components: buildPanelComponents(config, profileName) });
+            await message.edit({ flags: MessageFlags.IsComponentsV2, components: buildPanelComponents(config, profileName) });
             updatedPanels += 1;
           } catch (error) {
             failedPanels += 1;
@@ -429,7 +429,7 @@ module.exports = {
           continue;
         }
         try {
-          await message.edit({ components: buildPanelComponents(config, profileName) });
+          await message.edit({ flags: MessageFlags.IsComponentsV2, components: buildPanelComponents(config, profileName) });
           updatedPanels += 1;
         } catch (error) {
           failedPanels += 1;
