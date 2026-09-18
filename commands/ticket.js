@@ -112,11 +112,14 @@ function parseColor(color) {
   return /^[0-9a-f]{6}$/i.test(value) ? parseInt(value, 16) : 0x5865f2;
 }
 
+// Matches exactly one emoji (standard, flag, keycap, or ZWJ sequence) with nothing else attached.
+const EMOJI_SEQUENCE_REGEX = /^(?:\p{Regional_Indicator}{2}|[#*0-9]\uFE0F?\u20E3|\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?)*)$/u;
+
 function isValidButtonEmoji(value) {
   if (typeof value !== 'string' || !value.trim()) return false;
   const emoji = value.trim();
   if (/^<a?:[A-Za-z0-9_]+:\d{17,20}>$/.test(emoji)) return true;
-  return /[^\x00-\x7F]/.test(emoji) && [...emoji].length <= 16;
+  return EMOJI_SEQUENCE_REGEX.test(emoji);
 }
 
 // The button field accepts either an emoji or short text; apply whichever Discord property it's valid for.
