@@ -51,10 +51,10 @@ function normalizeProfile(config = {}) {
     const saved = config.content?.[type] || {};
     content[type] = {
       label: typeof saved.label === 'string' && saved.label.trim() ? saved.label : definition.label,
-      description: typeof saved.description === 'string' && saved.description.trim() ? saved.description : definition.description,
+      description: typeof saved.description === 'string' ? saved.description : definition.description,
       emoji: typeof saved.emoji === 'string' && saved.emoji.trim() ? saved.emoji : definition.emoji,
-      opening: typeof saved.opening === 'string' && saved.opening.trim() ? saved.opening : 'Example opening message',
-      questions: Array.isArray(saved.questions) && saved.questions.length ? saved.questions.slice(0, 8).map(String) : definition.questions,
+      opening: typeof saved.opening === 'string' ? saved.opening : 'Example opening message',
+      questions: Array.isArray(saved.questions) ? saved.questions.slice(0, 8).map(String).filter((question) => question.trim()) : definition.questions,
     };
   }
   return { panel, content };
@@ -157,14 +157,14 @@ function buildPanelComponents(config, profileName) {
     for (const [index, [type]] of blockEntries.entries()) {
       const content = config.content[type];
       const label = String(content.label || 'Placeholder Header').slice(0, 256);
-      const description = String(content.description || 'Description example text').slice(0, 4000);
+      const description = String(content.description || '').slice(0, 4000);
       const button = applyButtonAppearance(
         new ButtonBuilder().setCustomId(`ticket-open:${profileName}:${type}`).setStyle(ButtonStyle.Secondary),
         content.emoji
       );
       container.addSectionComponents(
         new SectionBuilder()
-          .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${label}**\n${description}`))
+          .addTextDisplayComponents(new TextDisplayBuilder().setContent(description ? `**${label}**\n${description}` : `**${label}**`))
           .setButtonAccessory(button)
       );
     }
@@ -193,14 +193,14 @@ function buildEditModal(config, profileName) {
   );
 }
 
-function buildContentEditModal(type, config, profileName) {
+function buildContentEditModal(type, config, profileName, number) {
   const content = config.content[type];
   const modal = new ModalBuilder().setCustomId(`ticket-content-edit:${profileName}:${type}`).setTitle(`Edit ${TICKET_TYPES[type].label}`);
-  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Option header').setStyle(TextInputStyle.Short).setRequired(true).setValue(content.label)));
-  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel('Option description').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.description)));
+  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel(`Ticket ${number} header`).setStyle(TextInputStyle.Short).setRequired(true).setValue(content.label)));
+  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel(`Ticket ${number} description`).setStyle(TextInputStyle.Paragraph).setRequired(false).setValue(content.description)));
   modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Button emoji or short text').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80).setValue(content.emoji)));
-  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('opening').setLabel('Opening message').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.opening.slice(0, 4000))));
-  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('questions').setLabel('Questions, one per line (up to 8)').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.questions.map((question, index) => `${index + 1}. ${question}`).join('\n').slice(0, 4000))));
+  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('opening').setLabel('Opening message (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false).setValue(content.opening.slice(0, 4000))));
+  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('questions').setLabel('Questions, one per line (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false).setValue(content.questions.map((question, index) => `${index + 1}. ${question}`).join('\n').slice(0, 4000))));
   return modal;
 }
 
@@ -250,7 +250,9 @@ async function createTicket(interaction, context, type, profileName = 'default')
   if (questions.length) ticketRecord.intake = { questions, answers: [], index: 0 };
   context.tickets.set(channel.id, ticketRecord);
   context.saveTickets();
-  await channel.send({ content: `<@${interaction.user.id}> <@&${config.staffRoleId}>`, embeds: [new EmbedBuilder().setColor(parseColor(config.panel.color)).setTitle(config.content[type].label).setDescription(config.content[type].opening)], components: buildTicketControls(channel.id) });
+  const openingEmbed = new EmbedBuilder().setColor(parseColor(config.panel.color)).setTitle(config.content[type].label);
+  if (config.content[type].opening) openingEmbed.setDescription(config.content[type].opening);
+  await channel.send({ content: `<@${interaction.user.id}> <@&${config.staffRoleId}>`, embeds: [openingEmbed], components: buildTicketControls(channel.id) });
   if (questions.length) {
     await channel.send(buildQuestionPrompt(0, questions.length, questions[0]));
   }
@@ -480,7 +482,7 @@ module.exports = {
       const number = interaction.options.getInteger('number', true);
       const type = Object.keys(TICKET_TYPES)[number - 1];
       if (!type || number > config.panel.optionCount) { await interaction.reply({ content: `That row is not currently enabled. Choose a number from 1 to ${config.panel.optionCount}.`, flags: 64 }); return; }
-      await interaction.showModal(buildContentEditModal(type, config, profileName));
+      await interaction.showModal(buildContentEditModal(type, config, profileName, number));
       return;
     }
     if (group === 'edit' && subcommand === 'panel') {
