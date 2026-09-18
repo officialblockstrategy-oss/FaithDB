@@ -129,13 +129,16 @@ function buildPanelComponents(config, profileName) {
 
     for (const [index, [type]] of blockEntries.entries()) {
       const content = config.content[type];
+      const label = String(content.label || 'Placeholder Header').slice(0, 256);
+      const description = String(content.description || 'Description example text').slice(0, 4000);
+      const emoji = String(content.emoji || '🎫').trim().slice(0, 100);
       const button = new ButtonBuilder()
         .setCustomId(`ticket-open:${profileName}:${type}`)
-        .setEmoji(content.emoji)
+        .setEmoji(emoji)
         .setStyle(ButtonStyle.Secondary);
       container.addSectionComponents(
         new SectionBuilder()
-          .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${content.label}**\n${content.description}`))
+          .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${label}**\n${description}`))
           .setButtonAccessory(button)
       );
     }
@@ -419,6 +422,7 @@ module.exports = {
       let updatedPanels = 0;
       let removedPanels = 0;
       let failedPanels = 0;
+      const refreshErrors = [];
       const panels = [...context.ticketPanels.entries()].filter(([, value]) => value.guildId === interaction.guildId && (value.profileName || 'default') === profileName);
       for (const [messageId, panel] of panels) {
         const channel = await interaction.client.channels.fetch(panel.channelId).catch(() => null);
@@ -433,12 +437,14 @@ module.exports = {
           updatedPanels += 1;
         } catch (error) {
           failedPanels += 1;
+          refreshErrors.push(`${messageId}: ${error.message || 'unknown Discord error'}`);
           console.error(`Failed to refresh ticket panel ${messageId} after content edit:`, error);
         }
       }
       context.saveTicketPanels();
       saveConfig(context, interaction.guildId, config, profileName);
-      await interaction.reply({ content: `${TICKET_TYPES[type].label} ticket content updated. Refreshed ${updatedPanels} panel${updatedPanels === 1 ? '' : 's'}${removedPanels ? `, removed ${removedPanels} stale record${removedPanels === 1 ? '' : 's'}` : ''}${failedPanels ? `, and ${failedPanels} panel${failedPanels === 1 ? '' : 's'} could not be refreshed` : ''}.`, flags: 64 }); return;
+      const errorSummary = refreshErrors.length ? ` Errors: ${refreshErrors.join(' | ').slice(0, 700)}` : '';
+      await interaction.reply({ content: `${TICKET_TYPES[type].label} ticket content updated. Refreshed ${updatedPanels} panel${updatedPanels === 1 ? '' : 's'}${removedPanels ? `, removed ${removedPanels} stale record${removedPanels === 1 ? '' : 's'}` : ''}${failedPanels ? `, and ${failedPanels} panel${failedPanels === 1 ? '' : 's'} could not be refreshed` : ''}.${errorSummary}`, flags: 64 }); return;
     }
     if (interaction.customId.startsWith('ticket-intake:')) { const [, profileName, type] = interaction.customId.split(':'); const config = getConfig(context.ticketConfigs, interaction.guildId, profileName || 'default'); const answers = config.content[type].questions.slice(0, 4).map((_, index) => interaction.fields.getTextInputValue(`answer_${index}`)); await createTicket(interaction, context, type, answers, profileName || 'default'); }
   },
