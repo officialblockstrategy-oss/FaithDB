@@ -178,15 +178,6 @@ function findOpenTicket(guild, tickets, userId) {
   return [...tickets.values()].find((ticket) => ticket.guildId === guild.id && ticket.ownerId === userId && ticket.status === 'open');
 }
 
-function buildIntakeModal(type, config, profileName) {
-  const questions = config.content[type].questions.slice(0, 4);
-  const modal = new ModalBuilder().setCustomId(`ticket-intake:${profileName}:${type}`).setTitle(`${config.content[type].label} ticket`);
-  for (let index = 0; index < questions.length; index += 1) {
-    modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(`answer_${index}`).setLabel(questions[index].slice(0, 45)).setStyle(TextInputStyle.Paragraph).setRequired(index === 0).setMaxLength(1000)));
-  }
-  return modal;
-}
-
 function buildEditModal(config, profileName) {
   const imageUrl = typeof config.panel.imageUrl === 'string' ? config.panel.imageUrl.slice(0, 4000) : DEFAULT_PANEL.imageUrl;
   const optionCount = String(Number(config.panel.optionCount) || 1);
@@ -207,20 +198,25 @@ function buildContentEditModal(type, config, profileName) {
   return modal;
 }
 
-async function createTicket(interaction, context, type, answers, profileName = 'default') {
+// Asks questions one at a time in the ticket channel; no Discord modal input-count limit applies.
+function buildQuestionPrompt(index, total, question) {
+  return `**Question ${index + 1} of ${total}:**\n${question}`;
+}
+
+async function createTicket(interaction, context, type, profileName = 'default') {
   const config = getConfig(context.ticketConfigs, interaction.guildId, profileName);
   if (!config.categoryId || !config.staffRoleId) {
-    await interaction.reply({ content: 'Tickets are not configured yet. Staff must configure the category and staff role first.', flags: 64 });
+    await interaction.editReply({ content: 'Tickets are not configured yet. Staff must configure the category and staff role first.' });
     return;
   }
   const existing = findOpenTicket(interaction.guild, context.tickets, interaction.user.id);
   if (existing) {
-    await interaction.reply({ content: `You already have an open ticket: <#${existing.channelId}>. Please finish that conversation before opening another ticket.`, flags: 64 });
+    await interaction.editReply({ content: `You already have an open ticket: <#${existing.channelId}>. Please finish that conversation before opening another ticket.` });
     return;
   }
   const category = await interaction.guild.channels.fetch(config.categoryId).catch(() => null);
   if (!category || category.type !== ChannelType.GuildCategory) {
-    await interaction.reply({ content: 'The configured ticket category could not be found.', flags: 64 });
+    await interaction.editReply({ content: 'The configured ticket category could not be found.' });
     return;
   }
   const channel = await interaction.guild.channels.create({
@@ -234,11 +230,50 @@ async function createTicket(interaction, context, type, answers, profileName = '
       { id: config.staffRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages] },
     ],
   });
-  context.tickets.set(channel.id, { channelId: channel.id, guildId: interaction.guildId, ownerId: interaction.user.id, type, status: 'open', createdAt: Date.now() });
+  const questions = config.content[type].questions.slice(0, 8);
+  const ticketRecord = {
+    channelId: channel.id,
+    guildId: interaction.guildId,
+    ownerId: interaction.user.id,
+    type,
+    label: config.content[type].label,
+    color: config.panel.color,
+    status: 'open',
+    createdAt: Date.now(),
+  };
+  if (questions.length) ticketRecord.intake = { questions, answers: [], index: 0 };
+  context.tickets.set(channel.id, ticketRecord);
   context.saveTickets();
-  const answerText = config.content[type].questions.map((question, index) => `**${question}**\n${answers[index] || '_Please provide this in the conversation._'}`).join('\n\n');
-  await channel.send({ content: `<@${interaction.user.id}> <@&${config.staffRoleId}>`, embeds: [new EmbedBuilder().setColor(parseColor(config.panel.color)).setTitle(config.content[type].label).setDescription(`${config.content[type].opening}\n\n${answerText}`)], components: buildTicketControls(channel.id) });
-  await interaction.reply({ content: `Your ticket has been created: ${channel}`, flags: 64 });
+  await channel.send({ content: `<@${interaction.user.id}> <@&${config.staffRoleId}>`, embeds: [new EmbedBuilder().setColor(parseColor(config.panel.color)).setTitle(config.content[type].label).setDescription(config.content[type].opening)], components: buildTicketControls(channel.id) });
+  if (questions.length) {
+    await channel.send(buildQuestionPrompt(0, questions.length, questions[0]));
+  }
+  await interaction.editReply({ content: `Your ticket has been created: ${channel}` });
+}
+
+// Records the ticket owner's reply as the current question's answer and asks the next one, if any.
+async function handleTicketMessage(message, context) {
+  if (message.author.bot) return false;
+  const ticket = context.tickets.get(message.channel.id);
+  if (!ticket || ticket.status !== 'open' || !ticket.intake) return false;
+  if (ticket.ownerId !== message.author.id) return false;
+  const { questions, answers, index } = ticket.intake;
+  if (index >= questions.length) return false;
+
+  answers[index] = message.content?.trim() || '_No text provided._';
+  ticket.intake.index += 1;
+
+  if (ticket.intake.index < questions.length) {
+    await message.channel.send(buildQuestionPrompt(ticket.intake.index, questions.length, questions[ticket.intake.index])).catch(() => {});
+  } else {
+    const answerText = questions.map((question, questionIndex) => `**${question}**\n${answers[questionIndex]}`).join('\n\n');
+    await message.channel.send({
+      embeds: [new EmbedBuilder().setColor(parseColor(ticket.color)).setTitle('Thanks for answering!').setDescription(`Staff has been notified and will review your responses below.\n\n${answerText}`)],
+    }).catch(() => {});
+    delete ticket.intake;
+  }
+  context.saveTickets();
+  return true;
 }
 
 function escapeHtml(value) {
@@ -268,7 +303,7 @@ function buildHtmlTranscript(channel, ticket, messages) {
 function buildPlainTranscript(channel, ticket, messages) {
   const header = [
     `Transcript for #${channel.name}`,
-    `Ticket type: ${TICKET_TYPES[ticket.type]?.label || ticket.type}`,
+    `Ticket type: ${ticket.label || TICKET_TYPES[ticket.type]?.label || ticket.type}`,
     `Opened: ${new Date(ticket.createdAt).toISOString()}`,
     `Closed: ${new Date().toISOString()}`,
     '',
@@ -315,7 +350,7 @@ function buildTranscriptSummaryEmbed(channel, ticket, participantStats) {
     .setColor(0x5865f2)
     .addFields(
       { name: 'Ticket Owner', value: `<@${ticket.ownerId}>`, inline: true },
-      { name: 'Ticket Type', value: TICKET_TYPES[ticket.type]?.label || ticket.type, inline: true },
+      { name: 'Ticket Type', value: ticket.label || TICKET_TYPES[ticket.type]?.label || ticket.type, inline: true },
       { name: 'Duration Open', value: formatDuration(Date.now() - ticket.createdAt), inline: true },
       { name: 'Participants', value: participantsValue },
     )
@@ -462,7 +497,9 @@ module.exports = {
     if (interaction.customId.startsWith('ticket-open:')) {
       const [, panelKey, type] = interaction.customId.split(':');
       const profileName = context.ticketPanels.get(panelKey)?.profileName || panelKey || 'default';
-      if (TICKET_TYPES[type]) await interaction.showModal(buildIntakeModal(type, getConfig(context.ticketConfigs, interaction.guildId, profileName), profileName));
+      if (!TICKET_TYPES[type]) return;
+      await interaction.deferReply({ flags: 64 });
+      await createTicket(interaction, context, type, profileName);
       return;
     }
     if (interaction.customId.startsWith('ticket-close:')) {
@@ -551,6 +588,7 @@ module.exports = {
       const errorSummary = refreshErrors.length ? ` Errors: ${refreshErrors.join(' | ').slice(0, 700)}` : '';
       await interaction.reply({ content: `${TICKET_TYPES[type].label} ticket content updated. Refreshed ${updatedPanels} panel${updatedPanels === 1 ? '' : 's'}${removedPanels ? `, removed ${removedPanels} stale record${removedPanels === 1 ? '' : 's'}` : ''}${failedPanels ? `, and ${failedPanels} panel${failedPanels === 1 ? '' : 's'} could not be refreshed` : ''}.${errorSummary}`, flags: 64 }); return;
     }
-    if (interaction.customId.startsWith('ticket-intake:')) { const [, profileName, type] = interaction.customId.split(':'); const config = getConfig(context.ticketConfigs, interaction.guildId, profileName || 'default'); const answers = config.content[type].questions.slice(0, 4).map((_, index) => interaction.fields.getTextInputValue(`answer_${index}`)); await createTicket(interaction, context, type, answers, profileName || 'default'); }
   },
 };
+
+module.exports.handleMessage = handleTicketMessage;

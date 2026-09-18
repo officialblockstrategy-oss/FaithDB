@@ -107,8 +107,20 @@ const processedBumpMessages = new Set();
 
 module.exports = {
   name: 'messageCreate',
-  async execute(message, client, { stickies, saveStickies, verify, followups, bumpDetection, saveBumpDetection, kudos, saveKudos }) {
+  async execute(message, client, context) {
+    const { stickies, saveStickies, verify, followups, bumpDetection, saveBumpDetection, kudos, saveKudos } = context;
     if (!message.guild) return;
+
+    if (!message.author.bot) {
+      const ticketCommand = client.commands.get('ticket');
+      if (ticketCommand?.handleMessage) {
+        const handled = await ticketCommand.handleMessage(message, context).catch((error) => {
+          console.error('Ticket intake message error:', error);
+          return false;
+        });
+        if (handled) return;
+      }
+    }
 
     const config = getConfiguredBumpDetection(message.guild.id, bumpDetection);
     const isConfiguredBumpSource = Boolean(config && message.channel?.id === config.channelId && message.author?.id === config.userId && message.author?.bot);
