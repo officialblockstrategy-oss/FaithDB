@@ -220,7 +220,7 @@ async function createTicket(interaction, context, type, profileName = 'default')
     return;
   }
   const channel = await interaction.guild.channels.create({
-    name: `${config.content[type].label} ticket`.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 90),
+    name: `${config.content[type].label} ticket`.trim().replace(/\s+/gu, '-').slice(0, 90),
     type: ChannelType.GuildText,
     parent: category.id,
     topic: `faithdb-ticket:${interaction.user.id}:${type}`,
