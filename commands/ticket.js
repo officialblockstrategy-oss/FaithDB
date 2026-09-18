@@ -245,7 +245,7 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
 }
 
-async function buildTranscript(channel, ticket) {
+async function fetchTicketMessages(channel) {
   const messages = [];
   let before;
   while (true) {
@@ -256,8 +256,70 @@ async function buildTranscript(channel, ticket) {
     before = batch.last().id;
   }
   messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+  return messages;
+}
+
+function buildHtmlTranscript(channel, ticket, messages) {
   const rows = messages.map((message) => `<article><b>${escapeHtml(message.author?.tag || 'Unknown')}</b> <time>${new Date(message.createdTimestamp).toISOString()}</time><p>${escapeHtml(message.content || '')}</p>${[...message.attachments.values()].map((attachment) => `<a href="${escapeHtml(attachment.url)}">${escapeHtml(attachment.name || attachment.url)}</a>`).join('<br>')}</article>`).join('\n');
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(channel.name)} transcript</title><style>body{font:15px sans-serif;max-width:900px;margin:2rem auto;background:#202225;color:#eee}article{padding:1rem;border-bottom:1px solid #444}time{color:#aaa;font-size:.8rem}p{white-space:pre-wrap}</style></head><body><h1>${escapeHtml(channel.name)}</h1><p>Type: ${escapeHtml(ticket.type)}<br>Owner: ${escapeHtml(ticket.ownerId)}<br>Created: ${new Date(ticket.createdAt).toISOString()}</p>${rows}</body></html>`;
+}
+
+// Plain-text dialogue format, readable directly in a browser tab without opening a .html file.
+function buildPlainTranscript(channel, ticket, messages) {
+  const header = [
+    `Transcript for #${channel.name}`,
+    `Ticket type: ${TICKET_TYPES[ticket.type]?.label || ticket.type}`,
+    `Opened: ${new Date(ticket.createdAt).toISOString()}`,
+    `Closed: ${new Date().toISOString()}`,
+    '',
+  ];
+  const lines = messages.map((message) => {
+    const time = new Date(message.createdTimestamp).toISOString().replace('T', ' ').slice(0, 19);
+    const author = message.author?.tag || 'Unknown';
+    const attachments = [...message.attachments.values()].map((attachment) => attachment.url).join(' ');
+    return `[${time}] ${author}: ${message.content || ''}${attachments ? ` ${attachments}` : ''}`.trimEnd();
+  });
+  return [...header, ...lines].join('\n');
+}
+
+function formatDuration(ms) {
+  const totalMinutes = Math.max(0, Math.round(ms / 60000));
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes || !parts.length) parts.push(`${minutes}m`);
+  return parts.join(' ');
+}
+
+function buildParticipantStats(messages, excludeUserId) {
+  const stats = new Map();
+  for (const message of messages) {
+    const author = message.author;
+    if (!author || author.id === excludeUserId) continue;
+    const entry = stats.get(author.id) || { id: author.id, count: 0 };
+    entry.count += 1;
+    stats.set(author.id, entry);
+  }
+  return [...stats.values()].sort((a, b) => b.count - a.count);
+}
+
+function buildTranscriptSummaryEmbed(channel, ticket, participantStats) {
+  const participantsValue = participantStats.length
+    ? participantStats.map((entry) => `<@${entry.id}> — ${entry.count} message${entry.count === 1 ? '' : 's'}`).join('\n').slice(0, 1024)
+    : 'No messages recorded.';
+  return new EmbedBuilder()
+    .setTitle(`Transcript — #${channel.name}`)
+    .setColor(0x5865f2)
+    .addFields(
+      { name: 'Ticket Owner', value: `<@${ticket.ownerId}>`, inline: true },
+      { name: 'Ticket Type', value: TICKET_TYPES[ticket.type]?.label || ticket.type, inline: true },
+      { name: 'Duration Open', value: formatDuration(Date.now() - ticket.createdAt), inline: true },
+      { name: 'Participants', value: participantsValue },
+    )
+    .setTimestamp();
 }
 
 async function closeTicket(interaction, context, saveTranscript) {
@@ -267,9 +329,25 @@ async function closeTicket(interaction, context, saveTranscript) {
   if (!hasTicketPermission(interaction, config)) { await interaction.reply({ content: 'You do not have ticket permissions.', flags: 64 }); return; }
   await interaction.deferReply({ flags: 64 });
   if (saveTranscript) {
-    const html = await buildTranscript(interaction.channel, ticket);
+    const messages = await fetchTicketMessages(interaction.channel);
+    const html = buildHtmlTranscript(interaction.channel, ticket, messages);
+    const plainText = buildPlainTranscript(interaction.channel, ticket, messages);
+    const participantStats = buildParticipantStats(messages, interaction.client.user?.id);
+    const summaryEmbed = buildTranscriptSummaryEmbed(interaction.channel, ticket, participantStats);
     const logs = config.logsChannelId ? await interaction.guild.channels.fetch(config.logsChannelId).catch(() => null) : null;
-    if (logs?.isTextBased?.()) await logs.send({ content: `Transcript for ${interaction.channel} (${TICKET_TYPES[ticket.type]?.label || ticket.type})`, files: [new AttachmentBuilder(Buffer.from(html, 'utf8'), { name: `transcript-${interaction.channel.name}.html` })] });
+    if (logs?.isTextBased?.()) {
+      const sent = await logs.send({
+        embeds: [summaryEmbed],
+        files: [
+          new AttachmentBuilder(Buffer.from(html, 'utf8'), { name: `transcript-${interaction.channel.name}.html` }),
+          new AttachmentBuilder(Buffer.from(plainText, 'utf8'), { name: `transcript-${interaction.channel.name}.txt` }),
+        ],
+      });
+      const textAttachment = [...sent.attachments.values()].find((attachment) => attachment.name.endsWith('.txt'));
+      if (textAttachment) {
+        await sent.edit({ components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Read Transcript').setURL(textAttachment.url))] }).catch(() => {});
+      }
+    }
   }
   context.tickets.delete(ticket.channelId);
   context.saveTickets();
