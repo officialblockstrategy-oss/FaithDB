@@ -104,7 +104,13 @@ function saveConfig(context, guildId, config, profileName = 'default') {
 }
 
 function hasTicketPermission(interaction, config) {
-  return interaction.inGuild() && config.permissionRoles.some((roleId) => interaction.member?.roles?.cache?.has(roleId));
+  if (!interaction.inGuild()) return false;
+  if (interaction.guild?.ownerId === interaction.user.id) return true;
+  const memberPermissions = interaction.memberPermissions || interaction.member?.permissions;
+  if (memberPermissions?.has?.(PermissionFlagsBits.Administrator)) return true;
+  const memberRoles = interaction.member?.roles?.cache;
+  if (config.staffRoleId && memberRoles?.has(config.staffRoleId)) return true;
+  return config.permissionRoles.some((roleId) => memberRoles?.has(roleId));
 }
 
 function parseColor(color) {
