@@ -119,6 +119,13 @@ function isValidButtonEmoji(value) {
   return /[^\x00-\x7F]/.test(emoji) && [...emoji].length <= 16;
 }
 
+// The button field accepts either an emoji or short text; apply whichever Discord property it's valid for.
+function applyButtonAppearance(button, value) {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  if (isValidButtonEmoji(trimmed)) return button.setEmoji(trimmed);
+  return button.setLabel((trimmed || 'Open').slice(0, 80));
+}
+
 function buildPanelComponents(config, profileName) {
   const entries = Object.entries(TICKET_TYPES).slice(0, config.panel.optionCount);
   const containers = [];
@@ -138,11 +145,10 @@ function buildPanelComponents(config, profileName) {
       const content = config.content[type];
       const label = String(content.label || 'Placeholder Header').slice(0, 256);
       const description = String(content.description || 'Description example text').slice(0, 4000);
-      const emoji = isValidButtonEmoji(content.emoji) ? content.emoji.trim() : '🎫';
-      const button = new ButtonBuilder()
-        .setCustomId(`ticket-open:${profileName}:${type}`)
-        .setEmoji(emoji)
-        .setStyle(ButtonStyle.Secondary);
+      const button = applyButtonAppearance(
+        new ButtonBuilder().setCustomId(`ticket-open:${profileName}:${type}`).setStyle(ButtonStyle.Secondary),
+        content.emoji
+      );
       container.addSectionComponents(
         new SectionBuilder()
           .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${label}**\n${description}`))
@@ -186,7 +192,7 @@ function buildContentEditModal(type, config, profileName) {
   const modal = new ModalBuilder().setCustomId(`ticket-content-edit:${profileName}:${type}`).setTitle(`Edit ${TICKET_TYPES[type].label}`);
   modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('label').setLabel('Option header').setStyle(TextInputStyle.Short).setRequired(true).setValue(content.label)));
   modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('description').setLabel('Option description').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.description)));
-  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Button emoji').setStyle(TextInputStyle.Short).setRequired(true).setValue(content.emoji)));
+  modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('Button emoji or short text').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80).setValue(content.emoji)));
   modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('opening').setLabel('Opening message').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.opening.slice(0, 4000))));
   modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('questions').setLabel('Questions, one per line (up to 8)').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.questions.join('\n').slice(0, 4000))));
   return modal;
@@ -419,9 +425,9 @@ module.exports = {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) { await interaction.reply({ content: 'You need Manage Server permission.', flags: 64 }); return; }
       const [, profileName, type] = interaction.customId.split(':');
       const config = getConfig(context.ticketConfigs, interaction.guildId, profileName);
-      const emoji = interaction.fields.getTextInputValue('emoji').trim();
-      if (!isValidButtonEmoji(emoji)) {
-        await interaction.reply({ content: 'The button field must contain an emoji, such as 🎫, or a custom Discord emoji like <:ticket:123456789012345678>. Plain text is not valid there.', flags: 64 });
+      const emoji = interaction.fields.getTextInputValue('emoji').trim().slice(0, 80);
+      if (!emoji) {
+        await interaction.reply({ content: 'The button field cannot be empty. Enter an emoji or short text.', flags: 64 });
         return;
       }
       config.content[type] = {
