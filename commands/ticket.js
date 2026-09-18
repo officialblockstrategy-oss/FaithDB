@@ -32,7 +32,8 @@ const TICKET_TYPES = {
 };
 
 const DEFAULT_PANEL = {
-  imageUrl: 'https://placehold.co/1200x240/png?text=example.image.url',
+  imageUrl: '',
+  text: '',
   optionCount: 1,
   color: '#5865F2',
 };
@@ -142,7 +143,10 @@ function buildPanelComponents(config, profileName) {
 
   for (const [blockIndex, blockEntries] of blocks.entries()) {
     const container = new ContainerBuilder();
-    if (blockIndex === 0) {
+    if (blockIndex === 0 && config.panel.text?.trim()) {
+      container.addTextDisplayComponents(new TextDisplayBuilder().setContent(config.panel.text.trim().slice(0, 4000)));
+    }
+    if (blockIndex === 0 && config.panel.imageUrl) {
       container.addMediaGalleryComponents(
         new MediaGalleryBuilder().addItems(
           new MediaGalleryItemBuilder().setURL(config.panel.imageUrl)
@@ -179,10 +183,12 @@ function findOpenTicket(guild, tickets, userId) {
 }
 
 function buildEditModal(config, profileName) {
-  const imageUrl = typeof config.panel.imageUrl === 'string' ? config.panel.imageUrl.slice(0, 4000) : DEFAULT_PANEL.imageUrl;
+  const imageUrl = typeof config.panel.imageUrl === 'string' ? config.panel.imageUrl.slice(0, 4000) : '';
+  const text = typeof config.panel.text === 'string' ? config.panel.text.slice(0, 4000) : '';
   const optionCount = String(Number(config.panel.optionCount) || 1);
   return new ModalBuilder().setCustomId(`ticket-panel-edit:${profileName}`).setTitle('Edit ticket panel').addComponents(
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_image_url').setLabel('Header image URL').setStyle(TextInputStyle.Short).setRequired(true).setValue(imageUrl)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_text').setLabel('Panel text (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false).setValue(text)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_image_url').setLabel('Header image URL (optional)').setStyle(TextInputStyle.Short).setRequired(false).setValue(imageUrl)),
     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('panel_option_count').setLabel('Number of ticket options (1-8)').setStyle(TextInputStyle.Short).setRequired(true).setValue(optionCount)),
   );
 }
@@ -503,10 +509,12 @@ module.exports = {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) { await interaction.reply({ content: 'You need Manage Server permission.', flags: 64 }); return; }
       const profileName = interaction.customId.split(':')[1] || 'default';
       const config = getConfig(context.ticketConfigs, interaction.guildId, profileName);
+      const text = interaction.fields.getTextInputValue('panel_text').trim();
       const imageUrl = interaction.fields.getTextInputValue('panel_image_url').trim();
       const optionCount = Number.parseInt(interaction.fields.getTextInputValue('panel_option_count').trim(), 10);
-      if (!/^https?:\/\//i.test(imageUrl)) { await interaction.reply({ content: 'The header image URL must begin with http:// or https://.', flags: 64 }); return; }
+      if (imageUrl && !/^https?:\/\//i.test(imageUrl)) { await interaction.reply({ content: 'The header image URL must begin with http:// or https://.', flags: 64 }); return; }
       if (!Number.isInteger(optionCount) || optionCount < 1 || optionCount > 8) { await interaction.reply({ content: 'The number of ticket options must be between 1 and 8.', flags: 64 }); return; }
+      config.panel.text = text;
       config.panel.imageUrl = imageUrl;
       config.panel.optionCount = optionCount;
       const panels = [...context.ticketPanels.entries()].filter(([, value]) => value.guildId === interaction.guildId && (value.profileName || 'default') === profileName);
