@@ -220,7 +220,7 @@ async function createTicket(interaction, context, type, profileName = 'default')
     return;
   }
   const channel = await interaction.guild.channels.create({
-    name: `${type}-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 90),
+    name: `${config.content[type].label} ticket`.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 90),
     type: ChannelType.GuildText,
     parent: category.id,
     topic: `faithdb-ticket:${interaction.user.id}:${type}`,
@@ -276,10 +276,6 @@ async function handleTicketMessage(message, context) {
   return true;
 }
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
-}
-
 async function fetchTicketMessages(channel) {
   const messages = [];
   let before;
@@ -292,11 +288,6 @@ async function fetchTicketMessages(channel) {
   }
   messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
   return messages;
-}
-
-function buildHtmlTranscript(channel, ticket, messages) {
-  const rows = messages.map((message) => `<article><b>${escapeHtml(message.author?.tag || 'Unknown')}</b> <time>${new Date(message.createdTimestamp).toISOString()}</time><p>${escapeHtml(message.content || '')}</p>${[...message.attachments.values()].map((attachment) => `<a href="${escapeHtml(attachment.url)}">${escapeHtml(attachment.name || attachment.url)}</a>`).join('<br>')}</article>`).join('\n');
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(channel.name)} transcript</title><style>body{font:15px sans-serif;max-width:900px;margin:2rem auto;background:#202225;color:#eee}article{padding:1rem;border-bottom:1px solid #444}time{color:#aaa;font-size:.8rem}p{white-space:pre-wrap}</style></head><body><h1>${escapeHtml(channel.name)}</h1><p>Type: ${escapeHtml(ticket.type)}<br>Owner: ${escapeHtml(ticket.ownerId)}<br>Created: ${new Date(ticket.createdAt).toISOString()}</p>${rows}</body></html>`;
 }
 
 // Plain-text dialogue format, readable directly in a browser tab without opening a .html file.
@@ -365,7 +356,6 @@ async function closeTicket(interaction, context, saveTranscript) {
   await interaction.deferReply({ flags: 64 });
   if (saveTranscript) {
     const messages = await fetchTicketMessages(interaction.channel);
-    const html = buildHtmlTranscript(interaction.channel, ticket, messages);
     const plainText = buildPlainTranscript(interaction.channel, ticket, messages);
     const participantStats = buildParticipantStats(messages, interaction.client.user?.id);
     const summaryEmbed = buildTranscriptSummaryEmbed(interaction.channel, ticket, participantStats);
@@ -374,7 +364,6 @@ async function closeTicket(interaction, context, saveTranscript) {
       const sent = await logs.send({
         embeds: [summaryEmbed],
         files: [
-          new AttachmentBuilder(Buffer.from(html, 'utf8'), { name: `transcript-${interaction.channel.name}.html` }),
           new AttachmentBuilder(Buffer.from(plainText, 'utf8'), { name: `transcript-${interaction.channel.name}.txt` }),
         ],
       });
