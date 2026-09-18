@@ -57,7 +57,13 @@ function normalizeProfile(config = {}) {
       questions: Array.isArray(saved.questions) ? saved.questions.slice(0, 8).map(String).filter((question) => question.trim()) : definition.questions,
     };
   }
-  return { panel, content };
+  return {
+    panel,
+    content,
+    // Per-profile overrides; fall back to the guild-wide defaults when unset.
+    notifyRoleId: config.notifyRoleId || null,
+    permissionRoles: Array.isArray(config.permissionRoles) ? [...new Set(config.permissionRoles)] : [],
+  };
 }
 
 function normalizeGuildConfig(config = {}) {
@@ -89,7 +95,13 @@ function getConfig(configs, guildId, profileName = 'default') {
   if (!guildConfig.profiles[safeName]) guildConfig.profiles[safeName] = normalizeProfile({});
   const profile = guildConfig.profiles[safeName];
   profile.panel.optionCount = Math.min(8, Math.max(1, Number(profile.panel.optionCount) || 1));
-  return { ...guildConfig, ...profile, profileName: safeName };
+  return {
+    ...guildConfig,
+    ...profile,
+    staffRoleId: profile.notifyRoleId || guildConfig.staffRoleId,
+    permissionRoles: [...new Set([...guildConfig.permissionRoles, ...profile.permissionRoles])],
+    profileName: safeName,
+  };
 }
 
 function saveConfig(context, guildId, config, profileName = 'default') {
@@ -97,9 +109,41 @@ function saveConfig(context, guildId, config, profileName = 'default') {
   const safeName = String(profileName || 'default').trim().toLowerCase() || 'default';
   guildConfig.categoryId = config.categoryId;
   guildConfig.logsChannelId = config.logsChannelId;
-  guildConfig.staffRoleId = config.staffRoleId;
-  guildConfig.permissionRoles = config.permissionRoles;
-  guildConfig.profiles[safeName] = { panel: config.panel, content: config.content };
+  guildConfig.profiles[safeName] = {
+    panel: config.panel,
+    content: config.content,
+    notifyRoleId: guildConfig.profiles[safeName]?.notifyRoleId ?? null,
+    permissionRoles: guildConfig.profiles[safeName]?.permissionRoles ?? [],
+  };
+  context.ticketConfigs.set(guildId, guildConfig);
+  context.saveTicketConfigs();
+}
+
+// Sets the default notify role (no profile) or a per-profile override.
+function setNotifyRole(context, guildId, roleId, profileName) {
+  const guildConfig = getGuildConfig(context.ticketConfigs, guildId);
+  if (profileName) {
+    const safeName = String(profileName).trim().toLowerCase() || 'default';
+    if (!guildConfig.profiles[safeName]) guildConfig.profiles[safeName] = normalizeProfile({});
+    guildConfig.profiles[safeName].notifyRoleId = roleId;
+  } else {
+    guildConfig.staffRoleId = roleId;
+  }
+  context.ticketConfigs.set(guildId, guildConfig);
+  context.saveTicketConfigs();
+}
+
+// Grants a permission role guild-wide (no profile) or to a single profile only.
+function addPermissionRole(context, guildId, roleId, profileName) {
+  const guildConfig = getGuildConfig(context.ticketConfigs, guildId);
+  if (profileName) {
+    const safeName = String(profileName).trim().toLowerCase() || 'default';
+    if (!guildConfig.profiles[safeName]) guildConfig.profiles[safeName] = normalizeProfile({});
+    const roles = guildConfig.profiles[safeName].permissionRoles;
+    if (!roles.includes(roleId)) roles.push(roleId);
+  } else if (!guildConfig.permissionRoles.includes(roleId)) {
+    guildConfig.permissionRoles.push(roleId);
+  }
   context.ticketConfigs.set(guildId, guildConfig);
   context.saveTicketConfigs();
 }
@@ -247,6 +291,7 @@ async function createTicket(interaction, context, type, profileName = 'default')
     status: 'open',
     createdAt: Date.now(),
   };
+  ticketRecord.profileName = profileName;
   if (questions.length) ticketRecord.intake = { questions, answers: [], index: 0 };
   context.tickets.set(channel.id, ticketRecord);
   context.saveTickets();
@@ -358,7 +403,7 @@ function buildTranscriptSummaryEmbed(channel, ticket, participantStats) {
 
 async function closeTicket(interaction, context, saveTranscript) {
   const ticket = context.tickets.get(interaction.channelId);
-  const config = getConfig(context.ticketConfigs, interaction.guildId);
+  const config = getConfig(context.ticketConfigs, interaction.guildId, ticket?.profileName);
   if (!ticket || ticket.status !== 'open') { await interaction.reply({ content: 'This is not an open ticket.', flags: 64 }); return; }
   if (!hasTicketPermission(interaction, config)) { await interaction.reply({ content: 'You do not have ticket permissions.', flags: 64 }); return; }
   await interaction.deferReply({ flags: 64 });
@@ -429,11 +474,11 @@ module.exports = {
         { name: 'panel', description: 'Edit the persistent panel profile', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'profile', description: 'Persistent profile name', type: ApplicationCommandOptionType.String, required: false }] },
         { name: 'number', description: 'Edit one ticket option by row number', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'number', description: 'Option row number, from top to bottom', type: ApplicationCommandOptionType.Integer, required: true, min_value: 1, max_value: 8 }, { name: 'profile', description: 'Persistent profile name', type: ApplicationCommandOptionType.String, required: false }] },
       ] },
-      { name: 'grant', description: 'Grant ticket permissions to a role', type: ApplicationCommandOptionType.SubcommandGroup, options: [{ name: 'perms', description: 'Allow a role to manage tickets', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'role', description: 'Staff role', type: ApplicationCommandOptionType.Role, required: true }] }] },
+      { name: 'grant', description: 'Grant ticket permissions to a role', type: ApplicationCommandOptionType.SubcommandGroup, options: [{ name: 'perms', description: 'Allow a role to manage tickets', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'role', description: 'Staff role', type: ApplicationCommandOptionType.Role, required: true }, { name: 'profile', description: 'Only grant for this ticket profile (default: all profiles)', type: ApplicationCommandOptionType.String, required: false }] }] },
       { name: 'config', description: 'Configure ticket destinations', type: ApplicationCommandOptionType.SubcommandGroup, options: [
         { name: 'category', description: 'Set the ticket category', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'category', description: 'Ticket category', type: ApplicationCommandOptionType.Channel, channel_types: [ChannelType.GuildCategory], required: true }] },
         { name: 'logs', description: 'Set the transcript logs channel', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'channel', description: 'Transcript channel', type: ApplicationCommandOptionType.Channel, required: true }] },
-        { name: 'staff', description: 'Set the staff mention role', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'role', description: 'Staff role', type: ApplicationCommandOptionType.Role, required: true }] },
+        { name: 'notify', description: 'Set the role notified when tickets open', type: ApplicationCommandOptionType.Subcommand, options: [{ name: 'role', description: 'Role to notify', type: ApplicationCommandOptionType.Role, required: true }, { name: 'profile', description: 'Only notify for this ticket profile (default: all profiles)', type: ApplicationCommandOptionType.String, required: false }] },
       ] },
       { name: 'delete', description: 'Delete ticket data', type: ApplicationCommandOptionType.SubcommandGroup, options: [{ name: 'all', description: 'Delete this server\'s ticket panels, open tickets, and saved ticket data', type: ApplicationCommandOptionType.Subcommand }] },
     ],
@@ -445,15 +490,22 @@ module.exports = {
     const subcommand = interaction.options.getSubcommand();
     const profileName = interaction.options.getString('profile') || 'default';
     const config = getConfig(context.ticketConfigs, interaction.guildId, profileName);
+    if (group === 'config' && subcommand === 'notify') {
+      const role = interaction.options.getRole('role', true);
+      const notifyProfile = interaction.options.getString('profile');
+      setNotifyRole(context, interaction.guildId, role.id, notifyProfile);
+      await interaction.reply({ content: notifyProfile ? `Notify role for the "${notifyProfile}" profile set to ${role}.` : `Default notify role set to ${role}.`, flags: 64 }); return;
+    }
     if (group === 'config') {
       if (subcommand === 'category') config.categoryId = interaction.options.getChannel('category', true).id;
       if (subcommand === 'logs') config.logsChannelId = interaction.options.getChannel('channel', true).id;
-      if (subcommand === 'staff') config.staffRoleId = interaction.options.getRole('role', true).id;
       saveConfig(context, interaction.guildId, config, profileName); await interaction.reply({ content: 'Ticket configuration updated.', flags: 64 }); return;
     }
     if (group === 'grant' && subcommand === 'perms') {
-      const role = interaction.options.getRole('role', true); if (!config.permissionRoles.includes(role.id)) config.permissionRoles.push(role.id);
-      saveConfig(context, interaction.guildId, config, profileName); await interaction.reply({ content: `Granted ticket permissions to ${role}.`, flags: 64 }); return;
+      const role = interaction.options.getRole('role', true);
+      const grantProfile = interaction.options.getString('profile');
+      addPermissionRole(context, interaction.guildId, role.id, grantProfile);
+      await interaction.reply({ content: grantProfile ? `Granted ticket permissions to ${role} for the "${grantProfile}" profile.` : `Granted ticket permissions to ${role}.`, flags: 64 }); return;
     }
     if (group === 'delete' && subcommand === 'all') {
       await deleteAllTicketData(interaction, context);
@@ -500,7 +552,8 @@ module.exports = {
       return;
     }
     if (interaction.customId.startsWith('ticket-close:')) {
-      if (!hasTicketPermission(interaction, getConfig(context.ticketConfigs, interaction.guildId))) { await interaction.reply({ content: 'You do not have ticket permissions.', flags: 64 }); return; }
+      const ticket = context.tickets.get(interaction.channelId);
+      if (!hasTicketPermission(interaction, getConfig(context.ticketConfigs, interaction.guildId, ticket?.profileName))) { await interaction.reply({ content: 'You do not have ticket permissions.', flags: 64 }); return; }
       await interaction.reply({ content: 'You are about to close this ticket. Save its transcript before deleting the channel?', components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ticket-confirm:save').setLabel('Save transcript').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('ticket-confirm:delete').setLabel('Close without saving').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId('ticket-confirm:cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary))], flags: 64 }); return;
     }
     if (interaction.customId.startsWith('ticket-confirm:')) { if (interaction.customId.endsWith('cancel')) { await interaction.update({ content: 'Ticket closure cancelled.', components: [] }); return; } await closeTicket(interaction, context, interaction.customId.endsWith('save')); }
