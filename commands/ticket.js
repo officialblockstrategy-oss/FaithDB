@@ -112,6 +112,13 @@ function parseColor(color) {
   return /^[0-9a-f]{6}$/i.test(value) ? parseInt(value, 16) : 0x5865f2;
 }
 
+function isValidButtonEmoji(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const emoji = value.trim();
+  if (/^<a?:[A-Za-z0-9_]+:\d{17,20}>$/.test(emoji)) return true;
+  return /[^\x00-\x7F]/.test(emoji) && [...emoji].length <= 16;
+}
+
 function buildPanelComponents(config, profileName) {
   const entries = Object.entries(TICKET_TYPES).slice(0, config.panel.optionCount);
   const containers = [];
@@ -131,7 +138,7 @@ function buildPanelComponents(config, profileName) {
       const content = config.content[type];
       const label = String(content.label || 'Placeholder Header').slice(0, 256);
       const description = String(content.description || 'Description example text').slice(0, 4000);
-      const emoji = String(content.emoji || '🎫').trim().slice(0, 100);
+      const emoji = isValidButtonEmoji(content.emoji) ? content.emoji.trim() : '🎫';
       const button = new ButtonBuilder()
         .setCustomId(`ticket-open:${profileName}:${type}`)
         .setEmoji(emoji)
@@ -412,10 +419,15 @@ module.exports = {
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) { await interaction.reply({ content: 'You need Manage Server permission.', flags: 64 }); return; }
       const [, profileName, type] = interaction.customId.split(':');
       const config = getConfig(context.ticketConfigs, interaction.guildId, profileName);
+      const emoji = interaction.fields.getTextInputValue('emoji').trim();
+      if (!isValidButtonEmoji(emoji)) {
+        await interaction.reply({ content: 'The button field must contain an emoji, such as 🎫, or a custom Discord emoji like <:ticket:123456789012345678>. Plain text is not valid there.', flags: 64 });
+        return;
+      }
       config.content[type] = {
         label: interaction.fields.getTextInputValue('label').trim(),
         description: interaction.fields.getTextInputValue('description').trim(),
-        emoji: interaction.fields.getTextInputValue('emoji').trim(),
+        emoji,
         opening: interaction.fields.getTextInputValue('opening').trim(),
         questions: interaction.fields.getTextInputValue('questions').split('\n').map((question) => question.trim()).filter(Boolean).slice(0, 8),
       };
